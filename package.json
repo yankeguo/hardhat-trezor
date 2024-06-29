@@ -8,7 +8,8 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "prettier": "prettier . --write",
+    "build": "npm run prettier && rimraf dist tsconfig.tsbuildinfo && tsc"
   },
   "repository": {
     "type": "git",
@@ -29,6 +30,11 @@
   "devDependencies": {
     "@types/node": "^20.14.9",
     "hardhat": "^2.22.5",
+    "prettier": "3.3.2",
+    "rimraf": "^5.0.7",
     "typescript": "^5.5.2"
+  },
+  "dependencies": {
+    "@nomicfoundation/ethereumjs-util": "^9.0.4"
   }
 }
