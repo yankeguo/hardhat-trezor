@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "description": "Hardhat plugin for integration with a Trezor hardware wallet",
   "main": "dist/index.js",
+  "files": [
+    "dist",
+    "CHANGELOG.md"
+  ],
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -14,7 +18,7 @@
     "trezor",
     "hardhat",
     "cryptocurrency",
-    "smartcontract"
+    "smart-contract"
   ],
   "author": "GUO YANKE",
   "license": "MIT",
@@ -23,6 +27,8 @@
   },
   "homepage": "https://github.com/yankeguo/hardhat-trezor#readme",
   "devDependencies": {
+    "@types/node": "^20.14.9",
+    "hardhat": "^2.22.5",
     "typescript": "^5.5.2"
   }
 }
