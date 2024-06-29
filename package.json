@@ -9,6 +9,7 @@
   ],
   "scripts": {
     "prettier": "prettier . --write",
+    "protoc": "cd proto && protoc --plugin=../node_modules/.bin/protoc-gen-ts_proto --ts_proto_out=../src/proto *.proto && npm run prettier",
     "build": "npm run prettier && rimraf dist tsconfig.tsbuildinfo && tsc"
   },
   "repository": {
@@ -32,6 +33,7 @@
     "hardhat": "^2.22.5",
     "prettier": "3.3.2",
     "rimraf": "^5.0.7",
+    "ts-proto": "^1.180.0",
     "typescript": "^5.5.2"
   },
   "dependencies": {
