@@ -29,14 +29,16 @@
   },
   "homepage": "https://github.com/yankeguo/hardhat-trezor#readme",
   "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
     "@types/node": "^20.14.9",
     "hardhat": "^2.22.5",
     "prettier": "3.3.2",
+    "protobufjs-cli": "^1.1.2",
     "rimraf": "^5.0.7",
-    "ts-proto": "^1.180.0",
     "typescript": "^5.5.2"
   },
   "dependencies": {
-    "@nomicfoundation/ethereumjs-util": "^9.0.4"
+    "@nomicfoundation/ethereumjs-util": "^9.0.4",
+    "protobufjs": "^7.3.2"
   }
 }

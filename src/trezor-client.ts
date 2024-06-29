@@ -1,20 +1,24 @@
-import { isValidAddress } from "@nomicfoundation/ethereumjs-util";
-import { ProviderWrapperWithChainId } from "hardhat/internal/core/providers/chainId";
-import {
-  EIP1193Provider,
-  NetworkConfig,
-  RequestArguments,
-} from "hardhat/types";
 import { HardhatTrezorError } from "./errors";
+import { TrezorWire } from "./trezor-wire";
 
-class TrezorBridgeClient {
-  baseURL: string;
+export const defaultTrezorBridgeURL = "http://127.0.0.1:21325";
 
-  constructor(baseURL: string = "http://127.0.0.1:21325") {
-    if (baseURL.endsWith("/")) {
-      baseURL = baseURL.slice(0, -1);
+export interface TrezorClientOptions {
+  bridgeURL?: string;
+  wire: TrezorWire;
+}
+
+export class TrezorClient {
+  bridgeURL: string;
+  wire: TrezorWire;
+
+  constructor(opts: TrezorClientOptions) {
+    let bridgeURL = opts.bridgeURL ?? defaultTrezorBridgeURL;
+    if (bridgeURL.endsWith("/")) {
+      bridgeURL = bridgeURL.slice(0, -1);
     }
-    this.baseURL = baseURL;
+    this.bridgeURL = bridgeURL;
+    this.wire = opts.wire;
   }
 
   async invoke(path: string, body: any = {}) {
@@ -22,7 +26,7 @@ class TrezorBridgeClient {
       path = `/${path}`;
     }
     try {
-      return await fetch(`${this.baseURL}${path}`, {
+      return await fetch(`${this.bridgeURL}${path}`, {
         // all requests are POST
         method: "POST",
         body: typeof body == "string" ? body : JSON.stringify(body),
@@ -54,7 +58,7 @@ class TrezorBridgeClient {
   }
 
   async enumerate() {
-    const resp = await fetch(`${this.baseURL}/enumerate`);
+    const resp = await this.invoke("/enumerate");
     return (await resp.json()) as {
       path: string;
       session?: string;
@@ -107,85 +111,16 @@ class TrezorBridgeClient {
     if (respDataLength !== respData.length) {
       throw new HardhatTrezorError("Invalid response message length");
     }
+    if (respType === this.wire.MessageType_Failure) {
+      const { code, message } = this.wire.Failure.decode(respData) as {
+        code?: number;
+        message?: string;
+      };
+      throw new HardhatTrezorError(`Trezor failure: ${code} ${message}`);
+    }
     return {
       type: respType,
       data: respData,
     };
   }
-}
-
-export interface TrezorProviderOptions {
-  accounts: string[];
-  derivationFunction?: (accountNumber: number) => string;
-}
-
-export class TrezorProvider extends ProviderWrapperWithChainId {
-  deviceSession?: string;
-
-  accounts: string[];
-
-  wrappedProvider: EIP1193Provider;
-  derivationFunction?: (accountNumber: number) => string;
-
-  bridgeClient: TrezorBridgeClient;
-
-  constructor(
-    { accounts, derivationFunction }: TrezorProviderOptions,
-    wrappedProvider: EIP1193Provider,
-  ) {
-    super(wrappedProvider);
-
-    this.wrappedProvider = wrappedProvider;
-    this.accounts = accounts.map((account) => {
-      if (!isValidAddress(account)) {
-        throw new HardhatTrezorError(`Invalid account address: ${account}`);
-      }
-      return account.toLowerCase();
-    });
-    this.derivationFunction = derivationFunction;
-    this.bridgeClient = new TrezorBridgeClient();
-  }
-
-  async init() {
-    const { version } = await this.bridgeClient.version();
-
-    if (!version) {
-      throw new HardhatTrezorError("Trezor Bridge is not running");
-    }
-
-    const devices = await this.bridgeClient.enumerate();
-
-    if (devices.length === 0) {
-      throw new HardhatTrezorError("No Trezor devices found");
-    }
-
-    const device = devices[0];
-
-    const { session } = await this.bridgeClient.acquire(
-      device.path,
-      device.session,
-    );
-
-    if (!session) {
-      throw new HardhatTrezorError("Failed to acquire Trezor device");
-    }
-
-    this.deviceSession = session;
-  }
-
-  async request(args: RequestArguments): Promise<unknown> {
-    return this.wrappedProvider.request(args);
-  }
-}
-
-export async function createTrezorProvider(
-  provider: EIP1193Provider,
-  networkConfig: NetworkConfig,
-) {
-  const accounts = networkConfig.trezorAccounts;
-  const derivationFunction = networkConfig.trezorOptions?.derivationFunction;
-
-  const tp = new TrezorProvider({ accounts, derivationFunction }, provider);
-  await tp.init();
-  return tp;
 }
