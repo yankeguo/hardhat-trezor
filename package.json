@@ -1,0 +1,28 @@
+{
+  "name": "@yankeguo/hardhat-trezor",
+  "version": "0.1.0",
+  "description": "Hardhat plugin for integration with a Trezor hardware wallet",
+  "main": "dist/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yankeguo/hardhat-trezor.git"
+  },
+  "keywords": [
+    "trezor",
+    "hardhat",
+    "cryptocurrency",
+    "smartcontract"
+  ],
+  "author": "GUO YANKE",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/yankeguo/hardhat-trezor/issues"
+  },
+  "homepage": "https://github.com/yankeguo/hardhat-trezor#readme",
+  "devDependencies": {
+    "typescript": "^5.5.2"
+  }
+}
