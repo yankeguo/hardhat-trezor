@@ -1,6 +1,11 @@
 import { isValidAddress } from "@nomicfoundation/ethereumjs-util";
 import { HardhatTrezorError } from "./errors";
-import { TrezorMessageType, TrezorWire } from "./trezor-wire";
+import {
+  TrezorMessageType,
+  TrezorWire,
+  wireConvertTrezorEIP712Entries,
+} from "./trezor-wire";
+import { EIP712Message } from "./types";
 
 export const defaultTrezorBridgeURL = "http://127.0.0.1:21325";
 
@@ -119,33 +124,10 @@ export class TrezorClient {
     return this._decodePayload(await resp.text());
   }
 
-  private async _read(
+  private async _handlePayload(
     session: string,
-  ): Promise<{ code: number; data: Uint8Array }> {
-    const resp = await this._invoke(`/read/${session}`, "");
-    const { code, data } = this._decodePayload(await resp.text());
-    return { code, data };
-  }
-
-  private async _write(
-    session: string,
-    typeIn: TrezorMessageType,
-    dataIn: any,
-  ): Promise<void> {
-    await this._invoke(
-      `/post/${session}`,
-      this._encodePayload(typeIn.code, typeIn.type.encode(dataIn).finish()),
-    );
-    return;
-  }
-
-  public async call(
-    session: string,
-    typeIn: TrezorMessageType,
-    typeOut: TrezorMessageType,
-    dataIn: any,
+    resp: { code: number; data: Uint8Array },
   ) {
-    let resp = await this._call(session, typeIn, dataIn);
     while (true) {
       if (resp.code == this.wire.PinMatrixRequest.code) {
         console.log("Please enter your PIN on the Trezor device");
@@ -171,14 +153,56 @@ export class TrezorClient {
           `Trezor failure: ${error.code}:${error.message}`,
         );
       } else {
-        if (resp.code != typeOut.code) {
-          throw new HardhatTrezorError(
-            `Unexpected response message type:${resp.code}`,
-          );
-        }
-        return typeOut.type.decode(resp.data).toJSON();
+        return resp;
       }
     }
+  }
+
+  private async _read(
+    session: string,
+  ): Promise<{ code: number; data: Uint8Array }> {
+    const resp = await this._invoke(`/read/${session}`, "");
+    return this._decodePayload(await resp.text());
+  }
+
+  public async readRaw(session: string) {
+    return this._handlePayload(session, await this._read(session));
+  }
+
+  private async _write(
+    session: string,
+    typeIn: TrezorMessageType,
+    dataIn: any,
+  ): Promise<void> {
+    await this._invoke(
+      `/post/${session}`,
+      this._encodePayload(typeIn.code, typeIn.type.encode(dataIn).finish()),
+    );
+    return;
+  }
+
+  public async callRaw(
+    session: string,
+    typeIn: TrezorMessageType,
+    dataIn: any,
+  ) {
+    return this._handlePayload(
+      session,
+      await this._call(session, typeIn, dataIn),
+    );
+  }
+
+  public async call(
+    session: string,
+    typeIn: TrezorMessageType,
+    typeOut: TrezorMessageType,
+    dataIn: any,
+  ) {
+    const { code, data } = await this.callRaw(session, typeIn, dataIn);
+    if (code != typeOut.code) {
+      throw new HardhatTrezorError(`Unexpected response message type:${code}`);
+    }
+    return typeOut.type.decode(data).toJSON();
   }
 
   public async callInitialize(session: string) {
@@ -227,5 +251,59 @@ export class TrezorClient {
       { addressN: derivationPath, message: data },
     )) as { signature: string };
     return Buffer.from(signatureBase64, "base64").toString("hex");
+  }
+
+  public async callEthereumSignTypedData(
+    session: string,
+    derivationPath: number[],
+    message: EIP712Message,
+  ) {
+    let resp = await this.callRaw(session, this.wire.EthereumSignTypedData, {
+      addressN: derivationPath,
+      primaryType: message.primaryType,
+    });
+
+    while (true) {
+      switch (resp.code) {
+        case this.wire.EthereumTypedDataStructRequest.code: {
+          const { name } = this.wire.EthereumTypedDataStructRequest.type
+            .decode(resp.data)
+            .toJSON() as { name: string };
+          const members = message.types[name]!;
+          const body = wireConvertTrezorEIP712Entries(members, (name) => {
+            return message.types[name].length;
+          });
+          await this._write(
+            session,
+            this.wire.EthereumTypedDataStructAck,
+            body,
+          );
+          resp = await this.readRaw(session);
+          break;
+        }
+        case this.wire.EthereumTypedDataValueRequest.code: {
+          const { memberPath } = this.wire.EthereumTypedDataValueRequest.type
+            .decode(resp.data)
+            .toJSON() as { memberPath: number[] };
+          //TODO: fetch value and return to device
+          await this._write(session, this.wire.Cancel, {});
+          break;
+        }
+        case this.wire.EthereumTypedDataSignature.code: {
+          const { signature: signatureBase64 } =
+            this.wire.EthereumTypedDataSignature.type
+              .decode(resp.data)
+              .toJSON() as {
+              signature: string;
+            };
+          return Buffer.from(signatureBase64, "base64").toString("hex");
+        }
+        default: {
+          throw new HardhatTrezorError(
+            `Unexpected response message type:${resp.code}`,
+          );
+        }
+      }
+    }
   }
 }

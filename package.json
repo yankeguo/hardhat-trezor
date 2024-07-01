@@ -39,7 +39,9 @@
     "typescript": "^5.5.2"
   },
   "dependencies": {
+    "@ledgerhq/hw-app-eth": "^6.37.1",
     "@nomicfoundation/ethereumjs-util": "^9.0.4",
+    "io-ts": "^1.10.4",
     "protobufjs": "^7.3.2"
   }
 }

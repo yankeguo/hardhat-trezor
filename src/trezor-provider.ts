@@ -1,3 +1,4 @@
+import * as t from "io-ts";
 import { validateParams } from "hardhat/internal/core/jsonrpc/types/input/validation";
 import { rpcTransactionRequest } from "hardhat/internal/core/jsonrpc/types/input/transactionRequest";
 import {
@@ -25,6 +26,9 @@ import {
 import { TrezorClient } from "./trezor-client";
 import { HardhatError } from "hardhat/internal/core/errors";
 import { toRpcSig, toBytes } from "@nomicfoundation/ethereumjs-util";
+import { EIP712Message, decodeHex, isEIP712Message } from "./types";
+import { ethers } from "ethers";
+import { decode } from "punycode";
 
 type TrezorProviderOptions = {
   derivationPaths?: number[][];
@@ -174,7 +178,39 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
     );
   }
 
-  private async _ethSignTypedDataV4(params: any[]) {}
+  private async _ethSignTypedDataV4(params: any[]) {
+    if (params.length == 0) {
+      return;
+    }
+    const [address, data] = validateParams(params, rpcAddress, t.any as any);
+
+    if (!data) {
+      throw new HardhatError(ERRORS.NETWORK.ETHSIGN_MISSING_DATA_PARAM);
+    }
+
+    let typedMessage: EIP712Message;
+    try {
+      typedMessage = typeof data === "string" ? JSON.parse(data) : data;
+
+      if (!isEIP712Message(typedMessage)) {
+        throw new HardhatError(
+          ERRORS.NETWORK.ETHSIGN_TYPED_DATA_V4_INVALID_DATA_PARAM,
+        );
+      }
+    } catch {
+      throw new HardhatError(
+        ERRORS.NETWORK.ETHSIGN_TYPED_DATA_V4_INVALID_DATA_PARAM,
+      );
+    }
+
+    const account = this._resolveManagedAccount(address);
+
+    return this.client.callEthereumSignTypedData(
+      this.session,
+      account.derivationPath,
+      typedMessage,
+    );
+  }
 
   private async _ethSendTransaction(params: any[]) {}
 
