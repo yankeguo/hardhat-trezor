@@ -1,5 +1,6 @@
+import { isValidAddress } from "@nomicfoundation/ethereumjs-util";
 import { HardhatTrezorError } from "./errors";
-import { TrezorWire } from "./trezor-wire";
+import { TrezorMessageType, TrezorWire } from "./trezor-wire";
 
 export const defaultTrezorBridgeURL = "http://127.0.0.1:21325";
 
@@ -12,6 +13,35 @@ export class TrezorClient {
   bridgeURL: string;
   wire: TrezorWire;
 
+  static encodePayload(code: number, data: Uint8Array) {
+    // BE, 2 bytes (4 hex chars), message type
+    // BE, 4 bytes (8 hex chars), message length
+    // message payload
+    const bytes = new Uint8Array(6 + data.length);
+    const view = new DataView(bytes.buffer);
+    view.setUint16(0, code, false);
+    view.setUint32(2, data.length, false);
+    bytes.set(data, 6);
+    return Array.from(bytes)
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("");
+  }
+
+  static decodePayload(hex: string) {
+    const bytes = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < hex.length; i += 2) {
+      bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
+    }
+    const view = new DataView(bytes.buffer);
+    const code = view.getUint16(0, false);
+    const length = view.getUint32(2, false);
+    const data = bytes.slice(6);
+    if (length !== data.length) {
+      throw new HardhatTrezorError("Invalid response message length");
+    }
+    return { code, data };
+  }
+
   constructor(opts: TrezorClientOptions) {
     let bridgeURL = opts.bridgeURL ?? defaultTrezorBridgeURL;
     if (bridgeURL.endsWith("/")) {
@@ -21,7 +51,8 @@ export class TrezorClient {
     this.wire = opts.wire;
   }
 
-  async invoke(path: string, body: any = {}) {
+  async _invoke(path: string, body: any = {}) {
+    console.log("trezor_client._invoke", path, body);
     if (!path.startsWith("/")) {
       path = `/${path}`;
     }
@@ -51,14 +82,14 @@ export class TrezorClient {
   }
 
   async version() {
-    const resp = await this.invoke("/");
+    const resp = await this._invoke("/");
     return (await resp.json()) as {
       version: string;
     };
   }
 
   async enumerate() {
-    const resp = await this.invoke("/enumerate");
+    const resp = await this._invoke("/enumerate");
     return (await resp.json()) as {
       path: string;
       session?: string;
@@ -66,61 +97,127 @@ export class TrezorClient {
   }
 
   async acquire(path: string, previous?: string) {
-    const resp = await this.invoke(
+    const resp = await this._invoke(
       `/acquire/${path}/${previous ?? "null"}`,
       {},
     );
     return (await resp.json()) as { session: string };
   }
 
+  async release(session: string) {
+    await this._invoke(`/release/${session}`, {});
+  }
+
   async call(
     session: string,
-    type: number,
-    data: Uint8Array,
-  ): Promise<{ type: number; data: Uint8Array }> {
-    // BE, 2 bytes (4 hex chars), message type
-    // BE, 4 bytes (8 hex chars), message length
-    // message payload
-    const reqBytes = new Uint8Array(6 + data.length);
-    const reqView = new DataView(reqBytes.buffer);
-    reqView.setUint16(0, type, false);
-    reqView.setUint32(2, data.length, false);
-    reqBytes.set(data, 6);
-
-    // convert message to hex string
-    const reqHex = Array.from(reqBytes)
-      .map((byte) => byte.toString(16).padStart(2, "0"))
-      .join("");
-
-    const resp = await this.invoke(`/call/${session}`, reqHex);
-
-    const respHex = await resp.text();
-
-    // convert response from hex string to Uint8Array
-    const respBytes = new Uint8Array(respHex.length / 2);
-
-    for (let i = 0; i < respHex.length; i += 2) {
-      respBytes[i / 2] = parseInt(respHex.slice(i, i + 2), 16);
+    typeIn: TrezorMessageType,
+    typeOut: TrezorMessageType,
+    dataIn: any,
+  ) {
+    let resp = await this._call(session, typeIn, dataIn);
+    while (true) {
+      if (resp.code == this.wire.PinMatrixRequest.code) {
+        console.log("trezor_client.call got PinMatrixRequest");
+        await this._write(session, this.wire.PinMatrixAck, { pin: "000000" });
+        resp = await this._read(session);
+      } else if (resp.code == this.wire.PassphraseRequest.code) {
+        console.log("trezor_client.call got PassphraseRequest");
+        await this._write(session, this.wire.PassphraseAck, {
+          on_device: true,
+        });
+        resp = await this._read(session);
+      } else if (resp.code == this.wire.ButtonRequest.code) {
+        const data = this.wire.ButtonRequest.type.decode(resp.data).toJSON();
+        console.log("trezor_client.call got ButtonRequest", data);
+        await this._write(session, this.wire.ButtonAck, {});
+        resp = await this._read(session);
+      } else if (resp.code == this.wire.Failure.code) {
+        const error = this.wire.Failure.type.decode(resp.data).toJSON() as {
+          code?: number;
+          message?: string;
+        };
+        throw new HardhatTrezorError(
+          `Trezor failure: ${error.code}:${error.message}`,
+        );
+      } else {
+        if (resp.code != typeOut.code) {
+          throw new HardhatTrezorError(
+            `Unexpected response message type:${resp.code}`,
+          );
+        }
+        return typeOut.type.decode(resp.data).toJSON();
+      }
     }
+  }
 
-    // parse response
-    const respView = new DataView(respBytes.buffer);
-    const respType = respView.getUint16(0, false);
-    const respDataLength = respView.getUint32(2, false);
-    const respData = respBytes.slice(6);
-    if (respDataLength !== respData.length) {
-      throw new HardhatTrezorError("Invalid response message length");
+  async _call(
+    session: string,
+    typeIn: TrezorMessageType,
+    dataIn: any,
+  ): Promise<{ code: number; data: Uint8Array }> {
+    console.log("trezor_client._call", session, typeIn.name, dataIn);
+    const resp = await this._invoke(
+      `/call/${session}`,
+      TrezorClient.encodePayload(
+        typeIn.code,
+        typeIn.type.encode(dataIn).finish(),
+      ),
+    );
+    return TrezorClient.decodePayload(await resp.text());
+  }
+
+  async _write(
+    session: string,
+    typeIn: TrezorMessageType,
+    dataIn: any,
+  ): Promise<void> {
+    console.log("trezor_client._write", session, typeIn.name, dataIn);
+    await this._invoke(
+      `/post/${session}`,
+      TrezorClient.encodePayload(
+        typeIn.code,
+        typeIn.type.encode(dataIn).finish(),
+      ),
+    );
+    return;
+  }
+
+  async _read(session: string): Promise<{ code: number; data: Uint8Array }> {
+    console.log("trezor_client._read");
+    const resp = await this._invoke(`/read/${session}`, "");
+    const { code, data } = TrezorClient.decodePayload(await resp.text());
+    console.log("trezor_client._read", session, code);
+    return { code, data };
+  }
+
+  async callInitialize(session: string) {
+    return this.call(session, this.wire.Initialize, this.wire.Features, {});
+  }
+
+  async callEndSession(session: string) {
+    return this.call(session, this.wire.EndSession, this.wire.Success, {});
+  }
+
+  async callEthereumGetAddress(session: string, derivationPath: number[]) {
+    const accounts = [];
+
+    const { address: addressBatch } = (await this.call(
+      session,
+      this.wire.EthereumGetAddress,
+      this.wire.EthereumAddress,
+      { addressN: derivationPath },
+    )) as { address: string };
+
+    for (let address of addressBatch.split("\n")) {
+      address = address.trim();
+      if (address === "") {
+        continue;
+      }
+      if (!isValidAddress(address)) {
+        throw new HardhatTrezorError("Invalid address received from Trezor");
+      }
+      accounts.push(address.toLowerCase());
     }
-    if (respType === this.wire.MessageType_Failure) {
-      const { code, message } = this.wire.Failure.decode(respData) as {
-        code?: number;
-        message?: string;
-      };
-      throw new HardhatTrezorError(`Trezor failure: ${code} ${message}`);
-    }
-    return {
-      type: respType,
-      data: respData,
-    };
+    return accounts;
   }
 }

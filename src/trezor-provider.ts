@@ -58,44 +58,37 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
 
     const device = devices[0];
 
+    console.log(
+      "trezor_provider._initializeSession: found ",
+      device.path,
+      device.session,
+    );
+
     const { session } = await this.client.acquire(device.path, device.session);
 
     if (!session) {
       throw new HardhatTrezorError("Failed to acquire Trezor device");
     }
 
+    console.log("trezor_provider._initializeSession: acquired ", session);
+
     this.session = session;
+
+    process.on("exit", async () => {
+      if (this.session) {
+        await this.client.callEndSession(this.session);
+        await this.client.release(this.session);
+      }
+    });
+
+    await this.client.callInitialize(this.session);
   }
 
   async _initializeAccounts() {
-    const accounts = [];
-    const { type, data } = await this.client.call(
+    this.accounts = await this.client.callEthereumGetAddress(
       this.session!,
-      this.wire.MessageType_EthereumGetAddress,
-      this.wire.EthereumGetAddress.encode({
-        addressN: this.derivationPath,
-      }).finish(),
+      this.derivationPath,
     );
-    if (type !== this.wire.MessageType_EthereumAddress) {
-      throw new HardhatTrezorError(`Unexpected response message type:${type}`);
-    }
-    const { address: addressBatch } = this.wire.EthereumAddress.decode(
-      data,
-    ).toJSON() as { address: string };
-    if (!addressBatch) {
-      throw new HardhatTrezorError("No address received from Trezor");
-    }
-    for (let address of addressBatch.split("\n")) {
-      address = address.trim();
-      if (address === "") {
-        continue;
-      }
-      if (!isValidAddress(address)) {
-        throw new HardhatTrezorError("Invalid address received from Trezor");
-      }
-      accounts.push(address.toLowerCase());
-    }
-    this.accounts = accounts;
   }
 
   async initialize() {

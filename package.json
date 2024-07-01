@@ -8,9 +8,8 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "prettier": "prettier . --write",
-    "protoc": "cd proto && protoc --plugin=../node_modules/.bin/protoc-gen-ts_proto --ts_proto_out=../src/proto *.proto && npm run prettier",
-    "build": "npm run prettier && rimraf dist tsconfig.tsbuildinfo && tsc"
+    "format": "prettier . --write",
+    "build": "npm run format && rimraf dist tsconfig.tsbuildinfo && tsc"
   },
   "repository": {
     "type": "git",
@@ -29,8 +28,10 @@
   },
   "homepage": "https://github.com/yankeguo/hardhat-trezor#readme",
   "devDependencies": {
+    "@nomicfoundation/hardhat-ethers": "^3.0.6",
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
     "@types/node": "^20.14.9",
+    "ethers": "^6.13.1",
     "hardhat": "^2.22.5",
     "prettier": "3.3.2",
     "protobufjs-cli": "^1.1.2",
