@@ -5,25 +5,25 @@ import "hardhat/types/config";
 // We need to declare an extension to the HardhatConfig type to add our plugin's config.
 declare module "hardhat/types/config" {
   interface HardhatNetworkUserConfig {
-    trezorDerivationPath?: number[];
+    trezorDerivationPaths?: number[][];
   }
 
   interface HardhatNetworkConfig {
-    trezorDerivationPath?: number[];
+    trezorDerivationPaths?: number[][];
   }
 
   interface HttpNetworkUserConfig {
-    trezorDerivationPath?: number[];
+    trezorDerivationPaths?: number[][];
   }
   interface HttpNetworkConfig {
-    trezorDerivationPath?: number[];
+    trezorDerivationPaths?: number[][];
   }
 }
 
 extendConfig((config, userConfig) => {
   for (const networkName of Object.keys(config.networks)) {
-    config.networks[networkName].trezorDerivationPath =
-      userConfig.networks?.[networkName]?.trezorDerivationPath;
+    config.networks[networkName].trezorDerivationPaths =
+      userConfig.networks?.[networkName]?.trezorDerivationPaths;
   }
 });
 

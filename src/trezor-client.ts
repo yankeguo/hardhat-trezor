@@ -52,7 +52,6 @@ export class TrezorClient {
   }
 
   async _invoke(path: string, body: any = {}) {
-    console.log("trezor_client._invoke", path, body);
     if (!path.startsWith("/")) {
       path = `/${path}`;
     }
@@ -117,18 +116,18 @@ export class TrezorClient {
     let resp = await this._call(session, typeIn, dataIn);
     while (true) {
       if (resp.code == this.wire.PinMatrixRequest.code) {
-        console.log("trezor_client.call got PinMatrixRequest");
+        console.log("Please enter your PIN on the Trezor device");
         await this._write(session, this.wire.PinMatrixAck, { pin: "000000" });
         resp = await this._read(session);
       } else if (resp.code == this.wire.PassphraseRequest.code) {
-        console.log("trezor_client.call got PassphraseRequest");
+        console.log("Please enter your passphrase on the Trezor device");
         await this._write(session, this.wire.PassphraseAck, {
           on_device: true,
         });
         resp = await this._read(session);
       } else if (resp.code == this.wire.ButtonRequest.code) {
         const data = this.wire.ButtonRequest.type.decode(resp.data).toJSON();
-        console.log("trezor_client.call got ButtonRequest", data);
+        console.log("Please confirm action on the Trezor device", data);
         await this._write(session, this.wire.ButtonAck, {});
         resp = await this._read(session);
       } else if (resp.code == this.wire.Failure.code) {
@@ -155,7 +154,6 @@ export class TrezorClient {
     typeIn: TrezorMessageType,
     dataIn: any,
   ): Promise<{ code: number; data: Uint8Array }> {
-    console.log("trezor_client._call", session, typeIn.name, dataIn);
     const resp = await this._invoke(
       `/call/${session}`,
       TrezorClient.encodePayload(
@@ -171,7 +169,6 @@ export class TrezorClient {
     typeIn: TrezorMessageType,
     dataIn: any,
   ): Promise<void> {
-    console.log("trezor_client._write", session, typeIn.name, dataIn);
     await this._invoke(
       `/post/${session}`,
       TrezorClient.encodePayload(
@@ -183,10 +180,8 @@ export class TrezorClient {
   }
 
   async _read(session: string): Promise<{ code: number; data: Uint8Array }> {
-    console.log("trezor_client._read");
     const resp = await this._invoke(`/read/${session}`, "");
     const { code, data } = TrezorClient.decodePayload(await resp.text());
-    console.log("trezor_client._read", session, code);
     return { code, data };
   }
 

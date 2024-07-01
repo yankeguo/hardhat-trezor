@@ -17,7 +17,10 @@ module.exports = {
   networks: {
     sepolia: {
       url: "https://sepolia.infura.io/v3/" + process.env.INFURA_API_KEY,
-      trezorAccountIndexes: [[44, 60, 0, 0, 0]],
+      trezorDerivationPaths: [
+        [44, 60, 0, 0, 0],
+        [44, 60, 0, 0, 1],
+      ],
     },
   },
 } as HardhatUserConfig;
