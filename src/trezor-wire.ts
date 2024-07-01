@@ -102,6 +102,12 @@ export async function createTrezorWire() {
     EthereumAddress: lookupMessageType(
       "hw.trezor.messages.ethereum.EthereumAddress",
     ),
+    EthereumSignMessage: lookupMessageType(
+      "hw.trezor.messages.ethereum.EthereumSignMessage",
+    ),
+    EthereumMessageSignature: lookupMessageType(
+      "hw.trezor.messages.ethereum.EthereumMessageSignature",
+    ),
     // management
     Initialize: lookupMessageType("hw.trezor.messages.management.Initialize"),
     EndSession: lookupMessageType("hw.trezor.messages.management.EndSession"),

@@ -13,7 +13,7 @@ export class TrezorClient {
   bridgeURL: string;
   wire: TrezorWire;
 
-  static encodePayload(code: number, data: Uint8Array) {
+  private _encodePayload(code: number, data: Uint8Array) {
     // BE, 2 bytes (4 hex chars), message type
     // BE, 4 bytes (8 hex chars), message length
     // message payload
@@ -27,7 +27,7 @@ export class TrezorClient {
       .join("");
   }
 
-  static decodePayload(hex: string) {
+  private _decodePayload(hex: string) {
     const bytes = new Uint8Array(hex.length / 2);
     for (let i = 0; i < hex.length; i += 2) {
       bytes[i / 2] = parseInt(hex.slice(i, i + 2), 16);
@@ -51,7 +51,7 @@ export class TrezorClient {
     this.wire = opts.wire;
   }
 
-  async _invoke(path: string, body: any = {}) {
+  private async _invoke(path: string, body: any = {}) {
     if (!path.startsWith("/")) {
       path = `/${path}`;
     }
@@ -80,14 +80,14 @@ export class TrezorClient {
     }
   }
 
-  async version() {
+  public async version() {
     const resp = await this._invoke("/");
     return (await resp.json()) as {
       version: string;
     };
   }
 
-  async enumerate() {
+  public async enumerate() {
     const resp = await this._invoke("/enumerate");
     return (await resp.json()) as {
       path: string;
@@ -95,7 +95,7 @@ export class TrezorClient {
     }[];
   }
 
-  async acquire(path: string, previous?: string) {
+  public async acquire(path: string, previous?: string) {
     const resp = await this._invoke(
       `/acquire/${path}/${previous ?? "null"}`,
       {},
@@ -103,11 +103,43 @@ export class TrezorClient {
     return (await resp.json()) as { session: string };
   }
 
-  async release(session: string) {
+  public async release(session: string) {
     await this._invoke(`/release/${session}`, {});
   }
 
-  async call(
+  private async _call(
+    session: string,
+    typeIn: TrezorMessageType,
+    dataIn: any,
+  ): Promise<{ code: number; data: Uint8Array }> {
+    const resp = await this._invoke(
+      `/call/${session}`,
+      this._encodePayload(typeIn.code, typeIn.type.encode(dataIn).finish()),
+    );
+    return this._decodePayload(await resp.text());
+  }
+
+  private async _read(
+    session: string,
+  ): Promise<{ code: number; data: Uint8Array }> {
+    const resp = await this._invoke(`/read/${session}`, "");
+    const { code, data } = this._decodePayload(await resp.text());
+    return { code, data };
+  }
+
+  private async _write(
+    session: string,
+    typeIn: TrezorMessageType,
+    dataIn: any,
+  ): Promise<void> {
+    await this._invoke(
+      `/post/${session}`,
+      this._encodePayload(typeIn.code, typeIn.type.encode(dataIn).finish()),
+    );
+    return;
+  }
+
+  public async call(
     session: string,
     typeIn: TrezorMessageType,
     typeOut: TrezorMessageType,
@@ -149,51 +181,18 @@ export class TrezorClient {
     }
   }
 
-  async _call(
-    session: string,
-    typeIn: TrezorMessageType,
-    dataIn: any,
-  ): Promise<{ code: number; data: Uint8Array }> {
-    const resp = await this._invoke(
-      `/call/${session}`,
-      TrezorClient.encodePayload(
-        typeIn.code,
-        typeIn.type.encode(dataIn).finish(),
-      ),
-    );
-    return TrezorClient.decodePayload(await resp.text());
-  }
-
-  async _write(
-    session: string,
-    typeIn: TrezorMessageType,
-    dataIn: any,
-  ): Promise<void> {
-    await this._invoke(
-      `/post/${session}`,
-      TrezorClient.encodePayload(
-        typeIn.code,
-        typeIn.type.encode(dataIn).finish(),
-      ),
-    );
-    return;
-  }
-
-  async _read(session: string): Promise<{ code: number; data: Uint8Array }> {
-    const resp = await this._invoke(`/read/${session}`, "");
-    const { code, data } = TrezorClient.decodePayload(await resp.text());
-    return { code, data };
-  }
-
-  async callInitialize(session: string) {
+  public async callInitialize(session: string) {
     return this.call(session, this.wire.Initialize, this.wire.Features, {});
   }
 
-  async callEndSession(session: string) {
+  public async callEndSession(session: string) {
     return this.call(session, this.wire.EndSession, this.wire.Success, {});
   }
 
-  async callEthereumGetAddress(session: string, derivationPath: number[]) {
+  public async callEthereumGetAddress(
+    session: string,
+    derivationPath: number[],
+  ) {
     const accounts = [];
 
     const { address: addressBatch } = (await this.call(
@@ -214,5 +213,19 @@ export class TrezorClient {
       accounts.push(address.toLowerCase());
     }
     return accounts;
+  }
+
+  public async callEthereumSignMessage(
+    session: string,
+    derivationPath: number[],
+    data: Uint8Array,
+  ) {
+    const { signature: signatureBase64 } = (await this.call(
+      session,
+      this.wire.EthereumSignMessage,
+      this.wire.EthereumMessageSignature,
+      { addressN: derivationPath, message: data },
+    )) as { signature: string };
+    return Buffer.from(signatureBase64, "base64").toString("hex");
   }
 }

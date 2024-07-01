@@ -4,12 +4,24 @@ import { HardhatUserConfig } from "hardhat/config";
 import { task } from "hardhat/config";
 
 task("accounts", "Prints the list of accounts", async (taskArgs, hre) => {
-  const accounts = (await hre.network.provider.request({
+  const addresses = (await hre.network.provider.request({
     method: "eth_accounts",
   })) as string[];
-  for (const account of accounts) {
-    console.log(account);
+  for (const address of addresses) {
+    console.log(address);
   }
+});
+
+task("eth_sign", "Sign a data", async (taskArgs, hre) => {
+  const addresses = (await hre.network.provider.request({
+    method: "eth_accounts",
+  })) as string[];
+  const address = addresses[0];
+  const result = await hre.network.provider.request({
+    method: "eth_sign",
+    params: [address, "0x" + Buffer.from("Hello, world!").toString("hex")],
+  });
+  console.log(result);
 });
 
 module.exports = {

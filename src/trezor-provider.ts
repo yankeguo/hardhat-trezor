@@ -1,10 +1,21 @@
+import { validateParams } from "hardhat/internal/core/jsonrpc/types/input/validation";
+import { rpcTransactionRequest } from "hardhat/internal/core/jsonrpc/types/input/transactionRequest";
+import {
+  rpcAddress,
+  rpcData,
+  rpcQuantityToBigInt,
+} from "hardhat/internal/core/jsonrpc/types/base-types";
+import { ERRORS } from "hardhat/internal/core/errors-list";
 import { ProviderWrapperWithChainId } from "hardhat/internal/core/providers/chainId";
 import {
   EIP1193Provider,
   NetworkConfig,
   RequestArguments,
 } from "hardhat/types";
-import { HardhatTrezorError } from "./errors";
+import {
+  HardhatTrezorAccountNotManagedError,
+  HardhatTrezorError,
+} from "./errors";
 import {
   createTrezorWire,
   TrezorWire,
@@ -12,12 +23,19 @@ import {
   hardenDerivationPath,
 } from "./trezor-wire";
 import { TrezorClient } from "./trezor-client";
+import { HardhatError } from "hardhat/internal/core/errors";
+import { toRpcSig, toBytes } from "@nomicfoundation/ethereumjs-util";
 
 type TrezorProviderOptions = {
   derivationPaths?: number[][];
   client: TrezorClient;
   wire: TrezorWire;
 };
+
+interface TrezorAccount {
+  address: string;
+  derivationPath: number[];
+}
 
 export class TrezorProvider extends ProviderWrapperWithChainId {
   wrappedProvider: EIP1193Provider;
@@ -27,7 +45,7 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
   wire: TrezorWire;
 
   session?: string;
-  accounts?: string[];
+  accounts: TrezorAccount[];
 
   constructor(opts: TrezorProviderOptions, wrappedProvider: EIP1193Provider) {
     super(wrappedProvider);
@@ -38,11 +56,12 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
       derivationPaths = [defaultDerivationPath];
     }
     this.derivationPaths = derivationPaths.map((p) => hardenDerivationPath(p));
+    this.accounts = [];
     this.client = opts.client;
     this.wire = opts.wire;
   }
 
-  async _initializeSession() {
+  private async _initializeSession() {
     const { version } = await this.client.version();
 
     if (!version) {
@@ -75,28 +94,89 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
     await this.client.callInitialize(this.session);
   }
 
-  async _initializeAccounts() {
-    const accounts = [];
+  private async _initializeAccounts() {
+    const accounts: TrezorAccount[] = [];
     for (const derivationPath of this.derivationPaths) {
       const addresses = await this.client.callEthereumGetAddress(
         this.session!,
         derivationPath,
       );
-      accounts.push(...addresses);
+      for (const address of addresses) {
+        accounts.push({ address, derivationPath });
+      }
     }
     this.accounts = accounts;
   }
 
-  async initialize() {
+  public async initialize() {
     await this._initializeSession();
     await this._initializeAccounts();
   }
 
+  private _resolveManagedAccount(addrBuf: Buffer): TrezorAccount {
+    const address = "0x" + addrBuf.toString("hex").toLowerCase();
+    for (const acc of this.accounts) {
+      if (acc.address === address) {
+        return acc;
+      }
+    }
+    throw new HardhatTrezorAccountNotManagedError(address);
+  }
+
+  private async _ethSign(params: any[]) {
+    if (params.length == 0) {
+      return;
+    }
+
+    const [address, data] = validateParams(params, rpcAddress, rpcData);
+
+    if (!address) {
+      return;
+    }
+
+    if (!data) {
+      throw new HardhatError(ERRORS.NETWORK.ETHSIGN_MISSING_DATA_PARAM);
+    }
+
+    const account = this._resolveManagedAccount(address);
+
+    return this.client.callEthereumSignMessage(
+      this.session!,
+      account.derivationPath,
+      data,
+    );
+  }
+
+  private async _personalSign(params: any[]) {}
+
+  private async _ethSignTypedDataV4(params: any[]) {}
+
+  private async _ethSendTransaction(params: any[]) {}
+
   public async request(args: RequestArguments): Promise<unknown> {
     if (args.method === "eth_accounts") {
       const accounts = (await this.wrappedProvider.request(args)) as string[];
-      return [...this.accounts!, ...accounts];
+      return [...this.accounts.map((a) => a.address), ...accounts];
     }
+
+    const params = this._getParams(args);
+
+    try {
+      if (args.method === "eth_sign") {
+        return this._ethSign(params);
+      } else if (args.method === "personal_sign") {
+        return this._personalSign(params);
+      } else if (args.method === "eth_signTypedData_v4") {
+        return this._ethSignTypedDataV4(params);
+      } else if (args.method === "eth_sendTransaction") {
+        return this._ethSendTransaction(params);
+      }
+    } catch (error) {
+      if (!HardhatTrezorAccountNotManagedError.isInstance(error)) {
+        throw error;
+      }
+    }
+
     return this.wrappedProvider.request(args);
   }
 }
