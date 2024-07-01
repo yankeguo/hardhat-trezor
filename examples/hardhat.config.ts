@@ -24,6 +24,18 @@ task("eth_sign", "Sign a data", async (taskArgs, hre) => {
   console.log(result);
 });
 
+task("personal_sign", "Sign a personal data", async (taskArgs, hre) => {
+  const addresses = (await hre.network.provider.request({
+    method: "eth_accounts",
+  })) as string[];
+  const address = addresses[0];
+  const result = await hre.network.provider.request({
+    method: "personal_sign",
+    params: ["0x" + Buffer.from("Hello, world!").toString("hex"), address],
+  });
+  console.log(result);
+});
+
 module.exports = {
   solidity: "0.8.24",
   networks: {

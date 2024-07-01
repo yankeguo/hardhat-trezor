@@ -44,7 +44,7 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
   client: TrezorClient;
   wire: TrezorWire;
 
-  session?: string;
+  session: string;
   accounts: TrezorAccount[];
 
   constructor(opts: TrezorProviderOptions, wrappedProvider: EIP1193Provider) {
@@ -56,9 +56,11 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
       derivationPaths = [defaultDerivationPath];
     }
     this.derivationPaths = derivationPaths.map((p) => hardenDerivationPath(p));
-    this.accounts = [];
     this.client = opts.client;
     this.wire = opts.wire;
+
+    this.session = "";
+    this.accounts = [];
   }
 
   private async _initializeSession() {
@@ -88,6 +90,7 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
       if (this.session) {
         await this.client.callEndSession(this.session);
         await this.client.release(this.session);
+        this.session = "";
       }
     });
 
@@ -98,7 +101,7 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
     const accounts: TrezorAccount[] = [];
     for (const derivationPath of this.derivationPaths) {
       const addresses = await this.client.callEthereumGetAddress(
-        this.session!,
+        this.session,
         derivationPath,
       );
       for (const address of addresses) {
@@ -141,13 +144,35 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
     const account = this._resolveManagedAccount(address);
 
     return this.client.callEthereumSignMessage(
-      this.session!,
+      this.session,
       account.derivationPath,
       data,
     );
   }
 
-  private async _personalSign(params: any[]) {}
+  private async _personalSign(params: any[]) {
+    if (params.length == 0) {
+      return;
+    }
+
+    const [data, address] = validateParams(params, rpcData, rpcAddress);
+
+    if (!data) {
+      return;
+    }
+
+    if (!address) {
+      throw new HardhatError(ERRORS.NETWORK.PERSONALSIGN_MISSING_ADDRESS_PARAM);
+    }
+
+    const account = this._resolveManagedAccount(address);
+
+    return this.client.callEthereumSignMessage(
+      this.session,
+      account.derivationPath,
+      data,
+    );
+  }
 
   private async _ethSignTypedDataV4(params: any[]) {}
 
