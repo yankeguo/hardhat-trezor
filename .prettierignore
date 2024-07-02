@@ -1,1 +1,4 @@
-CHANGELOG.md
+/CHANGELOG.md
+/examples/artifacts
+/examples/cache
+package-lock.json

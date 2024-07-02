@@ -1,6 +1,8 @@
+import "@nomicfoundation/hardhat-ethers";
 import "../dist/index";
 import { HardhatUserConfig } from "hardhat/config";
 import { task } from "hardhat/config";
+import { ethers } from "ethers";
 
 function createExampleTypedMessage(from: string, to: string) {
   return {
@@ -140,6 +142,21 @@ task(
     console.log(result);
   },
 );
+
+task("eth_deploy", "deploy a contract", async (taskArgs, hre) => {
+  const [deployer] = await hre.ethers.getSigners();
+  console.log("Deploying contracts with the account:", deployer.address);
+  const balance = await hre.ethers
+    .getDefaultProvider()
+    .getBalance(deployer.address);
+  console.log("Account balance:", ethers.formatEther(balance), "ETH");
+  const factoryHelloWorld = await hre.ethers.getContractFactory(
+    "HelloWorld",
+    deployer,
+  );
+  const helloWorld = await factoryHelloWorld.deploy();
+  console.log("Contract address:", helloWorld.address);
+});
 
 module.exports = {
   solidity: "0.8.24",

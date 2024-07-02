@@ -6,7 +6,12 @@ import {
   TrezorWire,
 } from "./trezor-wire";
 import { EIP712Message } from "./types";
-import { base64ToBytes, base64ToHex, bytesToHex } from "./encoding";
+import {
+  base64ToBytes,
+  base64ToHex,
+  bytesToHex,
+  numberToBytes,
+} from "./encoding";
 
 export const defaultTrezorBridgeURL = "http://127.0.0.1:21325";
 
@@ -316,7 +321,7 @@ export class TrezorClient {
       gasPrice: Uint8Array;
       gasLimit: Uint8Array;
       to?: string;
-      value: Uint8Array;
+      value?: Uint8Array;
       chainId: number;
       data?: Uint8Array;
     },
@@ -327,7 +332,7 @@ export class TrezorClient {
       gasPrice: tx.gasPrice,
       gasLimit: tx.gasLimit,
       to: tx.to,
-      value: tx.value,
+      value: tx.value ?? numberToBytes(0),
       chainId: tx.chainId,
     };
     let dataPos = 0;
@@ -364,6 +369,7 @@ export class TrezorClient {
           } else {
             throw new HardhatTrezorError("Invalid response message");
           }
+          break;
         }
         default:
           throw new HardhatTrezorError(
@@ -382,7 +388,7 @@ export class TrezorClient {
       maxGasFee: Uint8Array;
       maxPriorityFee: Uint8Array;
       to?: string;
-      value: Uint8Array;
+      value?: Uint8Array;
       chainId: number;
       data?: Uint8Array;
       accessList?: Array<{ address: string; storageKeys?: Uint8Array[] }>;
@@ -395,7 +401,7 @@ export class TrezorClient {
       maxGasFee: tx.maxGasFee,
       maxPriorityFee: tx.maxPriorityFee,
       to: tx.to,
-      value: tx.value,
+      value: tx.value ?? numberToBytes(0),
       chainId: tx.chainId,
       accessList: tx.accessList,
     };
@@ -406,6 +412,7 @@ export class TrezorClient {
       body["dataLength"] = tx.data.length;
       dataPos = chunk.length;
     }
+    console.debug(body);
     let resp = await this.callRaw(
       session,
       this.wire.EthereumSignTxEIP1559,
@@ -437,6 +444,7 @@ export class TrezorClient {
           } else {
             throw new HardhatTrezorError("Invalid response message");
           }
+          break;
         }
         default:
           throw new HardhatTrezorError(
