@@ -1,3 +1,5 @@
+import { ethers } from "ethers";
+
 export type EIP712MessageDomain = Partial<{
   name: string;
   chainId: number;
@@ -33,17 +35,4 @@ export function isEIP712Message(message: unknown): message is EIP712Message {
     "domain" in message &&
     "message" in message
   );
-}
-
-export function uint8ArrayFromHex(data: string): Uint8Array {
-  if (data.startsWith("0x")) {
-    data = data.slice(2);
-  }
-  const buf = Buffer.from(data, "hex");
-  return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
-}
-
-export function uint8ArrayFromString(data: string): Uint8Array {
-  const buf = Buffer.from(data);
-  return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
 }

@@ -1,12 +1,8 @@
 import path from "node:path";
 import * as protobuf from "protobufjs";
 import { HardhatTrezorError } from "./errors";
-import {
-  EIP712Message,
-  EIP712MessageTypesEntry,
-  uint8ArrayFromHex,
-  uint8ArrayFromString,
-} from "./types";
+import { EIP712Message, EIP712MessageTypesEntry } from "./types";
+import { hexToBytes, numberToBytes, stringToBytes } from "./encoding";
 
 export const trezorWireDefaultDerivationPath = [44, 60, 0, 0, 0];
 
@@ -131,6 +127,18 @@ export async function createTrezorWire() {
     EthereumTypedDataSignature: lookupMessageType(
       "hw.trezor.messages.ethereum.EthereumTypedDataSignature",
     ),
+    EthereumSignTx: lookupMessageType(
+      "hw.trezor.messages.ethereum.EthereumSignTx",
+    ),
+    EthereumSignTxEIP1559: lookupMessageType(
+      "hw.trezor.messages.ethereum.EthereumSignTxEIP1559",
+    ),
+    EthereumTxRequest: lookupMessageType(
+      "hw.trezor.messages.ethereum.EthereumTxRequest",
+    ),
+    EthereumTxAck: lookupMessageType(
+      "hw.trezor.messages.ethereum.EthereumTxAck",
+    ),
     // ethereum_eip712
     EthereumSignTypedData: lookupMessageType(
       "hw.trezor.messages.ethereum_eip712.EthereumSignTypedData",
@@ -202,23 +210,14 @@ export class TrezorWireEIP712 {
 
   private _encodeNumber(value: number | string, size: number): Uint8Array {
     if (typeof value === "string") {
-      return uint8ArrayFromHex(value);
+      return hexToBytes(value);
     }
 
     if (size <= 0) {
       return new Uint8Array(0);
     }
 
-    const data = new Uint8Array(size);
-
-    for (let i = 0; i < size; i++) {
-      // big endian
-      const byte = value & 0xff;
-      data[size - i - 1] = byte;
-      value = value >> 8;
-    }
-
-    return data;
+    return numberToBytes(value, size);
   }
 
   private _encodeTypedValue(type: string, value: any): Uint8Array {
@@ -235,16 +234,16 @@ export class TrezorWireEIP712 {
       return this._encodeNumber(value, size);
     }
     if (type.startsWith("bytes")) {
-      return uint8ArrayFromHex(value);
+      return hexToBytes(value);
     }
     if (type.startsWith("string")) {
-      return uint8ArrayFromString(value);
+      return stringToBytes(value);
     }
     if (type.startsWith("bool")) {
       return this._encodeNumber(value ? 1 : 0, 1);
     }
     if (type.startsWith("address")) {
-      return uint8ArrayFromHex(value);
+      return hexToBytes(value);
     }
     throw new HardhatTrezorError(
       `Unsupported type while encoding value: ${type}`,

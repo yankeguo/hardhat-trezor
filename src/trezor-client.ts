@@ -6,6 +6,7 @@ import {
   TrezorWire,
 } from "./trezor-wire";
 import { EIP712Message } from "./types";
+import { base64ToBytes, base64ToHex, bytesToHex } from "./encoding";
 
 export const defaultTrezorBridgeURL = "http://127.0.0.1:21325";
 
@@ -27,9 +28,7 @@ export class TrezorClient {
     view.setUint16(0, code, false);
     view.setUint32(2, data.length, false);
     bytes.set(data, 6);
-    return Array.from(bytes)
-      .map((byte) => byte.toString(16).padStart(2, "0"))
-      .join("");
+    return bytesToHex(bytes);
   }
 
   private _decodePayload(hex: string) {
@@ -250,7 +249,7 @@ export class TrezorClient {
       this.wire.EthereumMessageSignature,
       { addressN: derivationPath, message: data },
     )) as { signature: string };
-    return Buffer.from(signatureBase64, "base64").toString("hex");
+    return base64ToHex(signatureBase64);
   }
 
   public async callEthereumSignTypedData(
@@ -298,13 +297,151 @@ export class TrezorClient {
               .toJSON() as {
               signature: string;
             };
-          return Buffer.from(signatureBase64, "base64").toString("hex");
+          return base64ToHex(signatureBase64);
         }
         default: {
           throw new HardhatTrezorError(
             `Unexpected response message type:${resp.code}`,
           );
         }
+      }
+    }
+  }
+
+  public async callEthereumSignTx(
+    session: string,
+    derivationPath: number[],
+    tx: {
+      nonce: Uint8Array;
+      gasPrice: Uint8Array;
+      gasLimit: Uint8Array;
+      to?: string;
+      value: Uint8Array;
+      chainId: number;
+      data?: Uint8Array;
+    },
+  ) {
+    let body: Record<string, any> = {
+      addressN: derivationPath,
+      nonce: tx.nonce,
+      gasPrice: tx.gasPrice,
+      gasLimit: tx.gasLimit,
+      to: tx.to,
+      value: tx.value,
+      chainId: tx.chainId,
+    };
+    let dataPos = 0;
+    if (tx.data) {
+      const chunk = tx.data.length > 1024 ? tx.data.slice(0, 1024) : tx.data;
+      body["dataInitialChunk"] = chunk;
+      body["dataLength"] = tx.data.length;
+      dataPos = chunk.length;
+    }
+    let resp = await this.callRaw(session, this.wire.EthereumSignTx, body);
+    while (true) {
+      switch (resp.code) {
+        case this.wire.EthereumTxRequest.code: {
+          const { dataLength, signatureV, signatureR, signatureS } =
+            this.wire.EthereumTxRequest.type.decode(resp.data).toJSON() as {
+              dataLength?: number;
+              signatureV?: number;
+              signatureR?: string;
+              signatureS?: string;
+            };
+          if (dataLength !== undefined) {
+            const chunk = tx.data?.slice(dataPos, dataPos + dataLength);
+            dataPos += dataLength;
+            await this._write(session, this.wire.EthereumTxAck, {
+              dataChunk: chunk,
+            });
+            resp = await this.readRaw(session);
+          } else if (signatureV !== undefined) {
+            return {
+              v: signatureV,
+              r: base64ToBytes(signatureR!),
+              s: base64ToBytes(signatureS!),
+            };
+          } else {
+            throw new HardhatTrezorError("Invalid response message");
+          }
+        }
+        default:
+          throw new HardhatTrezorError(
+            `Unexpected response message type:${resp.code}`,
+          );
+      }
+    }
+  }
+
+  public async callEthereumSignTxEIP1559(
+    session: string,
+    derivationPath: number[],
+    tx: {
+      nonce: Uint8Array;
+      gasLimit: Uint8Array;
+      maxGasFee: Uint8Array;
+      maxPriorityFee: Uint8Array;
+      to?: string;
+      value: Uint8Array;
+      chainId: number;
+      data?: Uint8Array;
+      accessList?: Array<{ address: string; storageKeys?: Uint8Array[] }>;
+    },
+  ) {
+    let body: Record<string, any> = {
+      addressN: derivationPath,
+      nonce: tx.nonce,
+      gasLimit: tx.gasLimit,
+      maxGasFee: tx.maxGasFee,
+      maxPriorityFee: tx.maxPriorityFee,
+      to: tx.to,
+      value: tx.value,
+      chainId: tx.chainId,
+      accessList: tx.accessList,
+    };
+    let dataPos = 0;
+    if (tx.data) {
+      const chunk = tx.data.length > 1024 ? tx.data.slice(0, 1024) : tx.data;
+      body["dataInitialChunk"] = chunk;
+      body["dataLength"] = tx.data.length;
+      dataPos = chunk.length;
+    }
+    let resp = await this.callRaw(
+      session,
+      this.wire.EthereumSignTxEIP1559,
+      body,
+    );
+    while (true) {
+      switch (resp.code) {
+        case this.wire.EthereumTxRequest.code: {
+          const { dataLength, signatureV, signatureR, signatureS } =
+            this.wire.EthereumTxRequest.type.decode(resp.data).toJSON() as {
+              dataLength?: number;
+              signatureV?: number;
+              signatureR?: string;
+              signatureS?: string;
+            };
+          if (dataLength !== undefined) {
+            const chunk = tx.data?.slice(dataPos, dataPos + dataLength);
+            dataPos += dataLength;
+            await this._write(session, this.wire.EthereumTxAck, {
+              dataChunk: chunk,
+            });
+            resp = await this.readRaw(session);
+          } else if (signatureV !== undefined) {
+            return {
+              v: signatureV,
+              r: base64ToBytes(signatureR!),
+              s: base64ToBytes(signatureS!),
+            };
+          } else {
+            throw new HardhatTrezorError("Invalid response message");
+          }
+        }
+        default:
+          throw new HardhatTrezorError(
+            `Unexpected response message type:${resp.code}`,
+          );
       }
     }
   }

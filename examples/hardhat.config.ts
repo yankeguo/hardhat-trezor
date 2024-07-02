@@ -1,4 +1,3 @@
-import "@nomicfoundation/hardhat-ethers";
 import "../dist/index";
 import { HardhatUserConfig } from "hardhat/config";
 import { task } from "hardhat/config";
@@ -85,17 +84,58 @@ task("personal_sign", "Sign a personal data", async (taskArgs, hre) => {
   console.log(result);
 });
 
+task("eth_sign_typed_data_v4", "Sign a typed data", async (taskArgs, hre) => {
+  const addresses = (await hre.network.provider.request({
+    method: "eth_accounts",
+  })) as string[];
+  const address = addresses[0];
+  const result = await hre.network.provider.request({
+    method: "eth_signTypedData_v4",
+    params: [address, createExampleTypedMessage(addresses[0], addresses[1])],
+  });
+  console.log(result);
+});
+
+task("eth_send_transaction", "Sign a legacy tx", async (taskArgs, hre) => {
+  const addresses = (await hre.network.provider.request({
+    method: "eth_accounts",
+  })) as string[];
+  const result = await hre.network.provider.request({
+    method: "eth_sendTransaction",
+    params: [
+      {
+        from: addresses[1],
+        to: addresses[0],
+        gas: "0x76c0",
+        value: "0x8ac7230489e80000",
+        data: "0x",
+        gasPrice: "0x4a817c800",
+      },
+    ],
+  });
+  console.log(result);
+});
+
 task(
-  "eth_sign_typed_data_v4",
-  "Sign a personal data",
+  "eth_send_transaction_eip1559",
+  "Sign a legacy tx",
   async (taskArgs, hre) => {
     const addresses = (await hre.network.provider.request({
       method: "eth_accounts",
     })) as string[];
-    const address = addresses[0];
     const result = await hre.network.provider.request({
-      method: "eth_signTypedData_v4",
-      params: [address, createExampleTypedMessage(addresses[0], addresses[1])],
+      method: "eth_sendTransaction",
+      params: [
+        {
+          from: addresses[1],
+          to: addresses[0],
+          gas: "0x76c0",
+          maxFeePerGas: "0x4a817c800",
+          maxPriorityFeePerGas: "0x4a817c800",
+          value: "0x8ac7230489e80000",
+          data: "0x",
+        },
+      ],
     });
     console.log(result);
   },

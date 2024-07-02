@@ -4,6 +4,9 @@ import {
   rpcAddress,
   rpcData,
 } from "hardhat/internal/core/jsonrpc/types/base-types";
+import { rpcQuantityToBigInt } from "hardhat/internal/core/jsonrpc/types/base-types";
+
+import { rpcTransactionRequest } from "hardhat/internal/core/jsonrpc/types/input/transactionRequest";
 import { ERRORS } from "hardhat/internal/core/errors-list";
 import { ProviderWrapperWithChainId } from "hardhat/internal/core/providers/chainId";
 import {
@@ -24,6 +27,13 @@ import {
 import { TrezorClient } from "./trezor-client";
 import { HardhatError } from "hardhat/internal/core/errors";
 import { EIP712Message, isEIP712Message } from "./types";
+import { ethers } from "ethers";
+import {
+  bufferToBytes,
+  bytesToHex,
+  numberToBytes,
+  numberToHex,
+} from "./encoding";
 
 type TrezorProviderOptions = {
   derivationPaths?: number[][];
@@ -117,8 +127,8 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
     await this._initializeAccounts();
   }
 
-  private _resolveManagedAccount(addrBuf: Buffer): TrezorAccount {
-    const address = "0x" + addrBuf.toString("hex").toLowerCase();
+  private _resolveManagedAccount(addrBuf: ArrayLike<number>): TrezorAccount {
+    const address = bytesToHex(addrBuf, true).toLowerCase();
     for (const acc of this.accounts) {
       if (acc.address === address) {
         return acc;
@@ -208,8 +218,126 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
       typedMessage,
     );
   }
+  private async _getNonce(address: Buffer): Promise<bigint> {
+    const { bytesToHex } = await import("@nomicfoundation/ethereumjs-util");
 
-  private async _ethSendTransaction(params: any[]) {}
+    const response = (await this._wrappedProvider.request({
+      method: "eth_getTransactionCount",
+      params: [bytesToHex(address), "pending"],
+    })) as string;
+
+    return rpcQuantityToBigInt(response);
+  }
+
+  private async _ethSendTransaction(params: any[]) {
+    const [txRequest] = validateParams(params, rpcTransactionRequest);
+
+    if (txRequest.gas === undefined) {
+      throw new HardhatError(ERRORS.NETWORK.MISSING_TX_PARAM_TO_SIGN_LOCALLY, {
+        param: "gas",
+      });
+    }
+
+    const hasGasPrice = txRequest.gasPrice !== undefined;
+    const hasEip1559Fields =
+      txRequest.maxFeePerGas !== undefined ||
+      txRequest.maxPriorityFeePerGas !== undefined;
+
+    if (!hasGasPrice && !hasEip1559Fields) {
+      throw new HardhatError(ERRORS.NETWORK.MISSING_FEE_PRICE_FIELDS);
+    }
+
+    if (hasGasPrice && hasEip1559Fields) {
+      throw new HardhatError(ERRORS.NETWORK.INCOMPATIBLE_FEE_PRICE_FIELDS);
+    }
+
+    if (hasEip1559Fields && txRequest.maxFeePerGas === undefined) {
+      throw new HardhatError(ERRORS.NETWORK.MISSING_TX_PARAM_TO_SIGN_LOCALLY, {
+        param: "maxFeePerGas",
+      });
+    }
+
+    if (hasEip1559Fields && txRequest.maxPriorityFeePerGas === undefined) {
+      throw new HardhatError(ERRORS.NETWORK.MISSING_TX_PARAM_TO_SIGN_LOCALLY, {
+        param: "maxPriorityFeePerGas",
+      });
+    }
+
+    if (txRequest.nonce === undefined) {
+      txRequest.nonce = await this._getNonce(txRequest.from);
+    }
+
+    const chainId = await this._getChainId();
+
+    const account = this._resolveManagedAccount(txRequest.from);
+
+    const baseTx: ethers.TransactionLike = {
+      chainId,
+      gasLimit: txRequest.gas,
+      gasPrice: txRequest.gasPrice,
+      maxFeePerGas: txRequest.maxFeePerGas,
+      maxPriorityFeePerGas: txRequest.maxPriorityFeePerGas,
+      nonce: Number(txRequest.nonce),
+      value: txRequest.value,
+    };
+    if (txRequest.to !== undefined) {
+      baseTx.to = bytesToHex(txRequest.to, true);
+    }
+    if (txRequest.data !== undefined) {
+      baseTx.data = bytesToHex(txRequest.data, true);
+    }
+
+    let resp: { v: number; r: Uint8Array; s: Uint8Array };
+
+    if (hasEip1559Fields) {
+      resp = await this.client.callEthereumSignTxEIP1559(
+        this.session,
+        account.derivationPath,
+        {
+          nonce: numberToBytes(baseTx.nonce!),
+          gasLimit: numberToBytes(baseTx.gasLimit!),
+          maxGasFee: numberToBytes(baseTx.maxFeePerGas!),
+          maxPriorityFee: numberToBytes(baseTx.maxPriorityFeePerGas!),
+          value: numberToBytes(baseTx.value!),
+          chainId: chainId,
+          to: baseTx.to ?? undefined,
+          data: txRequest.data ? bufferToBytes(txRequest.data) : undefined,
+          accessList: txRequest.accessList?.map((al) => ({
+            address: bytesToHex(al.address, true).toLowerCase(),
+            storageKeys: al.storageKeys?.map((sk) => bufferToBytes(sk)),
+          })),
+        },
+      );
+    } else {
+      resp = await this.client.callEthereumSignTx(
+        this.session,
+        account.derivationPath,
+        {
+          nonce: numberToBytes(baseTx.nonce!),
+          gasLimit: numberToBytes(baseTx.gasLimit!),
+          gasPrice: numberToBytes(baseTx.gasPrice!),
+          value: numberToBytes(baseTx.value!),
+          chainId: chainId,
+          to: baseTx.to ?? undefined,
+          data: txRequest.data ? bufferToBytes(txRequest.data) : undefined,
+        },
+      );
+    }
+
+    const rawTransaction = ethers.Transaction.from({
+      ...baseTx,
+      signature: {
+        v: numberToHex(resp.v, 4, true),
+        r: bytesToHex(resp.r, true),
+        s: bytesToHex(resp.s, true),
+      },
+    }).serialized;
+
+    return this._wrappedProvider.request({
+      method: "eth_sendRawTransaction",
+      params: [rawTransaction],
+    });
+  }
 
   public async request(args: RequestArguments): Promise<unknown> {
     if (args.method === "eth_accounts") {
