@@ -1,5 +1,8 @@
 # hardhat-trezor
 
+![NPM Version](https://img.shields.io/npm/v/%40yankeguo%2Fhardhat-trezor)
+![NPM Downloads](https://img.shields.io/npm/dw/%40yankeguo%2Fhardhat-trezor)
+
 Hardhat plugin for integration with a Trezor hardware wallet
 
 > [!CAUTION]
@@ -41,6 +44,10 @@ module.exports = {
   },
 };
 ```
+
+## Donation
+
+Send me some ETH or tokens to [`yankeguo.eth`](https://app.ens.domains/yankeguo.eth).
 
 ## Credits
 
