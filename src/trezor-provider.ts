@@ -1,10 +1,8 @@
 import * as t from "io-ts";
 import { validateParams } from "hardhat/internal/core/jsonrpc/types/input/validation";
-import { rpcTransactionRequest } from "hardhat/internal/core/jsonrpc/types/input/transactionRequest";
 import {
   rpcAddress,
   rpcData,
-  rpcQuantityToBigInt,
 } from "hardhat/internal/core/jsonrpc/types/base-types";
 import { ERRORS } from "hardhat/internal/core/errors-list";
 import { ProviderWrapperWithChainId } from "hardhat/internal/core/providers/chainId";
@@ -20,15 +18,12 @@ import {
 import {
   createTrezorWire,
   TrezorWire,
-  defaultDerivationPath,
-  hardenDerivationPath,
+  trezorWireDefaultDerivationPath,
+  trezorWireHardenDerivationPath,
 } from "./trezor-wire";
 import { TrezorClient } from "./trezor-client";
 import { HardhatError } from "hardhat/internal/core/errors";
-import { toRpcSig, toBytes } from "@nomicfoundation/ethereumjs-util";
-import { EIP712Message, decodeHex, isEIP712Message } from "./types";
-import { ethers } from "ethers";
-import { decode } from "punycode";
+import { EIP712Message, isEIP712Message } from "./types";
 
 type TrezorProviderOptions = {
   derivationPaths?: number[][];
@@ -57,9 +52,11 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
 
     let derivationPaths = opts.derivationPaths;
     if (!derivationPaths || derivationPaths.length === 0) {
-      derivationPaths = [defaultDerivationPath];
+      derivationPaths = [trezorWireDefaultDerivationPath];
     }
-    this.derivationPaths = derivationPaths.map((p) => hardenDerivationPath(p));
+    this.derivationPaths = derivationPaths.map((p) =>
+      trezorWireHardenDerivationPath(p),
+    );
     this.client = opts.client;
     this.wire = opts.wire;
 

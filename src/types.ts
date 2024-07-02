@@ -35,10 +35,15 @@ export function isEIP712Message(message: unknown): message is EIP712Message {
   );
 }
 
-export function decodeHex(data: string): Uint8Array {
+export function uint8ArrayFromHex(data: string): Uint8Array {
   if (data.startsWith("0x")) {
     data = data.slice(2);
   }
   const buf = Buffer.from(data, "hex");
+  return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+}
+
+export function uint8ArrayFromString(data: string): Uint8Array {
+  const buf = Buffer.from(data);
   return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
 }

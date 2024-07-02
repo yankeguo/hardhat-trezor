@@ -1,9 +1,9 @@
 import { isValidAddress } from "@nomicfoundation/ethereumjs-util";
 import { HardhatTrezorError } from "./errors";
 import {
-  TrezorMessageType,
+  TrezorWireEIP712,
+  TrezorWireMessageType,
   TrezorWire,
-  wireConvertTrezorEIP712Entries,
 } from "./trezor-wire";
 import { EIP712Message } from "./types";
 
@@ -114,7 +114,7 @@ export class TrezorClient {
 
   private async _call(
     session: string,
-    typeIn: TrezorMessageType,
+    typeIn: TrezorWireMessageType,
     dataIn: any,
   ): Promise<{ code: number; data: Uint8Array }> {
     const resp = await this._invoke(
@@ -171,7 +171,7 @@ export class TrezorClient {
 
   private async _write(
     session: string,
-    typeIn: TrezorMessageType,
+    typeIn: TrezorWireMessageType,
     dataIn: any,
   ): Promise<void> {
     await this._invoke(
@@ -183,7 +183,7 @@ export class TrezorClient {
 
   public async callRaw(
     session: string,
-    typeIn: TrezorMessageType,
+    typeIn: TrezorWireMessageType,
     dataIn: any,
   ) {
     return this._handlePayload(
@@ -194,8 +194,8 @@ export class TrezorClient {
 
   public async call(
     session: string,
-    typeIn: TrezorMessageType,
-    typeOut: TrezorMessageType,
+    typeIn: TrezorWireMessageType,
+    typeOut: TrezorWireMessageType,
     dataIn: any,
   ) {
     const { code, data } = await this.callRaw(session, typeIn, dataIn);
@@ -258,6 +258,8 @@ export class TrezorClient {
     derivationPath: number[],
     message: EIP712Message,
   ) {
+    const converter = new TrezorWireEIP712(message);
+
     let resp = await this.callRaw(session, this.wire.EthereumSignTypedData, {
       addressN: derivationPath,
       primaryType: message.primaryType,
@@ -269,14 +271,10 @@ export class TrezorClient {
           const { name } = this.wire.EthereumTypedDataStructRequest.type
             .decode(resp.data)
             .toJSON() as { name: string };
-          const members = message.types[name]!;
-          const body = wireConvertTrezorEIP712Entries(members, (name) => {
-            return message.types[name].length;
-          });
           await this._write(
             session,
             this.wire.EthereumTypedDataStructAck,
-            body,
+            converter.createEthereumTypedDataStructAck(name),
           );
           resp = await this.readRaw(session);
           break;
@@ -285,8 +283,12 @@ export class TrezorClient {
           const { memberPath } = this.wire.EthereumTypedDataValueRequest.type
             .decode(resp.data)
             .toJSON() as { memberPath: number[] };
-          //TODO: fetch value and return to device
-          await this._write(session, this.wire.Cancel, {});
+          await this._write(
+            session,
+            this.wire.EthereumTypedDataValueAck,
+            converter.createEthereumTypedDataValueAck(memberPath),
+          );
+          resp = await this.readRaw(session);
           break;
         }
         case this.wire.EthereumTypedDataSignature.code: {
