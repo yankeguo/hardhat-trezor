@@ -30,15 +30,23 @@ import "@yankeguo/hardhat-trezor";
 
 3. add the plugin configuration in your `hardhat.config.js`
 
+> [!CAUTION]
+>
+> Trezor hardware has a strict validation policy on derivation path
+>
+> Please make sure you are using the correct derivation path for your network
+>
+> Check https://github.com/trezor/trezor-firmware/blob/main/docs/common/ethereum-definitions.md
+
 ```js
 module.exports = {
   solidity: "0.8.24",
   networks: {
     sepolia: {
-      url: "https://sepolia.infura.io/v3/" + process.env.INFURA_API_KEY,
+      url: "https://sepolia.base.org",
       trezorDerivationPaths: [
-        [44, 60, 0, 0, 0], // account #0 for ethereum
-        [44, 60, 0, 0, 1], // account #1 for ethereum
+        [44, 1, 0, 0, 0], // account #0 for all testnet
+        [44, 1, 0, 0, 1], // account #1 for all testnet
       ],
     },
   },

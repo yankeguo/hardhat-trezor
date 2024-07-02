@@ -219,7 +219,7 @@ export class TrezorClient {
 
   public async callEthereumGetAddress(
     session: string,
-    derivationPath: number[],
+    args: { addressN: number[]; encodedNetwork: Uint8Array },
   ) {
     const accounts = [];
 
@@ -227,7 +227,7 @@ export class TrezorClient {
       session,
       this.wire.EthereumGetAddress,
       this.wire.EthereumAddress,
-      { addressN: derivationPath },
+      args,
     )) as { address: string };
 
     for (let address of addressBatch.split("\n")) {
@@ -245,29 +245,36 @@ export class TrezorClient {
 
   public async callEthereumSignMessage(
     session: string,
-    derivationPath: number[],
-    data: Uint8Array,
+    args: {
+      addressN: number[];
+      message: Uint8Array;
+      encodedNetwork: Uint8Array;
+    },
   ) {
     const { signature: signatureBase64 } = (await this.call(
       session,
       this.wire.EthereumSignMessage,
       this.wire.EthereumMessageSignature,
-      { addressN: derivationPath, message: data },
+      args,
     )) as { signature: string };
     return base64ToHex(signatureBase64);
   }
 
   public async callEthereumSignTypedData(
     session: string,
-    derivationPath: number[],
     message: EIP712Message,
+    args: {
+      addressN: number[];
+      definitions: { encodedNetwork: Uint8Array; encodedToken?: Uint8Array };
+    },
   ) {
     const converter = new TrezorWireEIP712(message);
 
-    let resp = await this.callRaw(session, this.wire.EthereumSignTypedData, {
-      addressN: derivationPath,
-      primaryType: message.primaryType,
-    });
+    let resp = await this.callRaw(
+      session,
+      this.wire.EthereumSignTypedData,
+      Object.assign(args, { primaryType: message.primaryType }),
+    );
 
     while (true) {
       switch (resp.code) {
@@ -317,13 +324,14 @@ export class TrezorClient {
     session: string,
     derivationPath: number[],
     tx: {
-      nonce: Uint8Array;
+      nonce?: Uint8Array;
       gasPrice: Uint8Array;
       gasLimit: Uint8Array;
       to?: string;
       value?: Uint8Array;
       chainId: number;
       data?: Uint8Array;
+      definitions?: { encodedNetwork?: Uint8Array; encodedToken?: Uint8Array };
     },
   ) {
     let body: Record<string, any> = {
@@ -334,6 +342,7 @@ export class TrezorClient {
       to: tx.to,
       value: tx.value ?? numberToBytes(0),
       chainId: tx.chainId,
+      definitions: tx.definitions,
     };
     let dataPos = 0;
     if (tx.data) {
@@ -383,7 +392,7 @@ export class TrezorClient {
     session: string,
     derivationPath: number[],
     tx: {
-      nonce: Uint8Array;
+      nonce?: Uint8Array;
       gasLimit: Uint8Array;
       maxGasFee: Uint8Array;
       maxPriorityFee: Uint8Array;
@@ -392,6 +401,7 @@ export class TrezorClient {
       chainId: number;
       data?: Uint8Array;
       accessList?: Array<{ address: string; storageKeys?: Uint8Array[] }>;
+      definitions?: { encodedNetwork?: Uint8Array; encodedToken?: Uint8Array };
     },
   ) {
     let body: Record<string, any> = {
@@ -404,6 +414,7 @@ export class TrezorClient {
       value: tx.value ?? numberToBytes(0),
       chainId: tx.chainId,
       accessList: tx.accessList,
+      definitions: tx.definitions,
     };
     let dataPos = 0;
     if (tx.data) {

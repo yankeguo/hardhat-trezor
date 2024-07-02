@@ -143,17 +143,23 @@ task(
   },
 );
 
-task("eth_deploy", "deploy a contract", async (taskArgs, hre) => {
-  const [deployer] = await hre.ethers.getSigners();
-  console.log("Deploying contracts with the account:", deployer.address);
-  const balance = await hre.ethers
-    .getDefaultProvider()
-    .getBalance(deployer.address);
+task("eth_send", "send eth", async (taskArgs, hre) => {
+  const [signer] = await hre.ethers.getSigners();
+  console.log("Sending from:", signer.address);
+  const balance = await hre.ethers.provider.getBalance(signer.address);
   console.log("Account balance:", ethers.formatEther(balance), "ETH");
-  const factoryHelloWorld = await hre.ethers.getContractFactory(
-    "HelloWorld",
-    deployer,
-  );
+  await signer.sendTransaction({
+    to: process.env.TO_ADDRESS,
+    value: ethers.parseEther("0.005"),
+  });
+});
+
+task("eth_deploy", "deploy a contract", async (taskArgs, hre) => {
+  const [signer] = await hre.ethers.getSigners();
+  console.log("Deploying contracts with the account:", signer.address);
+  const balance = await hre.ethers.provider.getBalance(signer.address);
+  console.log("Account balance:", ethers.formatEther(balance), "ETH");
+  const factoryHelloWorld = await hre.ethers.getContractFactory("HelloWorld");
   const helloWorld = await factoryHelloWorld.deploy();
   console.log("Contract address:", helloWorld.address);
 });
@@ -162,10 +168,10 @@ module.exports = {
   solidity: "0.8.24",
   networks: {
     sepolia: {
-      url: "https://sepolia.infura.io/v3/" + process.env.INFURA_API_KEY,
+      url: "https://sepolia.base.org",
       trezorDerivationPaths: [
-        [44, 60, 0, 0, 0],
-        [44, 60, 0, 0, 1],
+        [44, 1, 0, 0, 0],
+        [44, 1, 0, 0, 1],
       ],
     },
   },

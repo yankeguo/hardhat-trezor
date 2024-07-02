@@ -41,6 +41,10 @@ export async function createTrezorWire() {
       root: await _loadProtobufFile("messages-ethereum-eip712"),
     },
     {
+      prefix: "hw.trezor.messages.ethereum_definitions.",
+      root: await _loadProtobufFile("messages-ethereum-definitions"),
+    },
+    {
       prefix: "hw.trezor.messages.ethereum.",
       root: await _loadProtobufFile("messages-ethereum"),
     },

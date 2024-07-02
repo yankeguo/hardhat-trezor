@@ -47,19 +47,23 @@ interface TrezorAccount {
 }
 
 export class TrezorProvider extends ProviderWrapperWithChainId {
-  wrappedProvider: EIP1193Provider;
+  _wrappedProvider: EIP1193Provider;
 
   derivationPaths: number[][];
   client: TrezorClient;
   wire: TrezorWire;
 
+  chainId: number;
+  encodedNetwork: Uint8Array;
+
   session: string;
+
   accounts: TrezorAccount[];
 
   constructor(opts: TrezorProviderOptions, wrappedProvider: EIP1193Provider) {
     super(wrappedProvider);
-    this.wrappedProvider = wrappedProvider;
 
+    this._wrappedProvider = wrappedProvider;
     let derivationPaths = opts.derivationPaths;
     if (!derivationPaths || derivationPaths.length === 0) {
       derivationPaths = [trezorWireDefaultDerivationPath];
@@ -70,8 +74,22 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
     this.client = opts.client;
     this.wire = opts.wire;
 
+    // empty network info
+    this.chainId = -1;
+    this.encodedNetwork = new Uint8Array();
+
+    // empty session and accounts
     this.session = "";
     this.accounts = [];
+  }
+
+  private async _initializeNetwork() {
+    this.chainId = await this._getChainId();
+
+    const resp = await fetch(
+      `https://data.trezor.io/firmware/eth-definitions/chain-id/${this.chainId}/network.dat`,
+    );
+    this.encodedNetwork = new Uint8Array(await resp.arrayBuffer());
   }
 
   private async _initializeSession() {
@@ -111,10 +129,10 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
   private async _initializeAccounts() {
     const accounts: TrezorAccount[] = [];
     for (const derivationPath of this.derivationPaths) {
-      const addresses = await this.client.callEthereumGetAddress(
-        this.session,
-        derivationPath,
-      );
+      const addresses = await this.client.callEthereumGetAddress(this.session, {
+        addressN: derivationPath,
+        encodedNetwork: this.encodedNetwork,
+      });
       for (const address of addresses) {
         accounts.push({ address, derivationPath });
       }
@@ -124,6 +142,7 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
 
   public async initialize() {
     await this._initializeSession();
+    await this._initializeNetwork();
     await this._initializeAccounts();
   }
 
@@ -154,11 +173,11 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
 
     const account = this._resolveManagedAccount(address);
 
-    return this.client.callEthereumSignMessage(
-      this.session,
-      account.derivationPath,
-      data,
-    );
+    return this.client.callEthereumSignMessage(this.session, {
+      addressN: account.derivationPath,
+      encodedNetwork: this.encodedNetwork,
+      message: data,
+    });
   }
 
   private async _personalSign(params: any[]) {
@@ -178,11 +197,11 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
 
     const account = this._resolveManagedAccount(address);
 
-    return this.client.callEthereumSignMessage(
-      this.session,
-      account.derivationPath,
-      data,
-    );
+    return this.client.callEthereumSignMessage(this.session, {
+      addressN: account.derivationPath,
+      encodedNetwork: this.encodedNetwork,
+      message: data,
+    });
   }
 
   private async _ethSignTypedDataV4(params: any[]) {
@@ -212,11 +231,10 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
 
     const account = this._resolveManagedAccount(address);
 
-    return this.client.callEthereumSignTypedData(
-      this.session,
-      account.derivationPath,
-      typedMessage,
-    );
+    return this.client.callEthereumSignTypedData(this.session, typedMessage, {
+      addressN: account.derivationPath,
+      definitions: { encodedNetwork: this.encodedNetwork },
+    });
   }
   private async _getNonce(address: Buffer): Promise<bigint> {
     const { bytesToHex } = await import("@nomicfoundation/ethereumjs-util");
@@ -267,12 +285,10 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
       txRequest.nonce = await this._getNonce(txRequest.from);
     }
 
-    const chainId = await this._getChainId();
-
     const account = this._resolveManagedAccount(txRequest.from);
 
     const baseTx: ethers.TransactionLike = {
-      chainId,
+      chainId: this.chainId,
       gasLimit: txRequest.gas,
       gasPrice: txRequest.gasPrice,
       maxFeePerGas: txRequest.maxFeePerGas,
@@ -294,18 +310,20 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
         this.session,
         account.derivationPath,
         {
-          nonce: numberToBytes(baseTx.nonce!),
+          nonce: baseTx.nonce == null ? undefined : numberToBytes(baseTx.nonce),
           gasLimit: numberToBytes(baseTx.gasLimit!),
           maxGasFee: numberToBytes(baseTx.maxFeePerGas!),
           maxPriorityFee: numberToBytes(baseTx.maxPriorityFeePerGas!),
-          value: baseTx.value ? numberToBytes(baseTx.value) : undefined,
-          chainId: chainId,
+          value: baseTx.value == null ? undefined : numberToBytes(baseTx.value),
+          chainId: this.chainId,
           to: baseTx.to ?? undefined,
-          data: txRequest.data ? bufferToBytes(txRequest.data) : undefined,
+          data:
+            txRequest.data == null ? undefined : bufferToBytes(txRequest.data),
           accessList: txRequest.accessList?.map((al) => ({
             address: bytesToHex(al.address, true).toLowerCase(),
             storageKeys: al.storageKeys?.map((sk) => bufferToBytes(sk)),
           })),
+          definitions: { encodedNetwork: this.encodedNetwork },
         },
       );
     } else {
@@ -313,13 +331,16 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
         this.session,
         account.derivationPath,
         {
-          nonce: numberToBytes(baseTx.nonce!),
+          nonce:
+            baseTx.nonce == null ? undefined : numberToBytes(baseTx.nonce, 32),
           gasLimit: numberToBytes(baseTx.gasLimit!),
           gasPrice: numberToBytes(baseTx.gasPrice!),
-          value: baseTx.value ? numberToBytes(baseTx.value) : undefined,
-          chainId: chainId,
+          value: baseTx.value == null ? undefined : numberToBytes(baseTx.value),
+          chainId: this.chainId,
           to: baseTx.to ?? undefined,
-          data: txRequest.data ? bufferToBytes(txRequest.data) : undefined,
+          data:
+            txRequest.data == null ? undefined : bufferToBytes(txRequest.data),
+          definitions: { encodedNetwork: this.encodedNetwork },
         },
       );
     }
@@ -333,6 +354,10 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
       },
     }).serialized;
 
+    console.log(txRequest.from.toString("hex"));
+    console.log(rawTransaction);
+    console.debug(account);
+
     return this._wrappedProvider.request({
       method: "eth_sendRawTransaction",
       params: [rawTransaction],
@@ -341,21 +366,20 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
 
   public async request(args: RequestArguments): Promise<unknown> {
     if (args.method === "eth_accounts") {
-      const accounts = (await this.wrappedProvider.request(args)) as string[];
-      return [...this.accounts.map((a) => a.address), ...accounts];
+      const accounts = (await this._wrappedProvider.request(args)) as string[];
+      return [...accounts, ...this.accounts.map((a) => a.address)];
     }
 
-    const params = this._getParams(args);
-
     try {
+      const params = this._getParams(args);
       if (args.method === "eth_sign") {
-        return this._ethSign(params);
+        return await this._ethSign(params);
       } else if (args.method === "personal_sign") {
-        return this._personalSign(params);
+        return await this._personalSign(params);
       } else if (args.method === "eth_signTypedData_v4") {
-        return this._ethSignTypedDataV4(params);
+        return await this._ethSignTypedDataV4(params);
       } else if (args.method === "eth_sendTransaction") {
-        return this._ethSendTransaction(params);
+        return await this._ethSendTransaction(params);
       }
     } catch (error) {
       if (!HardhatTrezorAccountNotManagedError.isInstance(error)) {
@@ -363,7 +387,7 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
       }
     }
 
-    return this.wrappedProvider.request(args);
+    return this._wrappedProvider.request(args);
   }
 }
 
