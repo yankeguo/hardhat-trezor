@@ -2,6 +2,15 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.1.2 - 2024-07-03
+#### Documentation
+- update README.md [skip ci] - (7355dc7) - GUO YANKE
+#### Miscellaneous Chores
+- **(version)** update version in package.json - (4db6c13) - GUO YANKE
+- cleanup logging and unused imports - (dfc29ea) - GUO YANKE
+
+- - -
+
 ## v0.1.1 - 2024-07-03
 #### Bug Fixes
 - eth sending and smart contract deployment is working now - (352bd7c) - GUO YANKE
