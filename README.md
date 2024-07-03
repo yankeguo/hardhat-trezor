@@ -7,7 +7,7 @@ Hardhat plugin for integration with a Trezor hardware wallet
 
 > [!CAUTION]
 >
-> This package is in alpha stage and should be used with caution. Use it at your own risk.
+> This package comes with no warranty, use at your own risk
 
 ## Requirements
 
