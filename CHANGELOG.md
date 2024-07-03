@@ -2,6 +2,18 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.1.1 - 2024-07-03
+#### Bug Fixes
+- eth sending and smart contract deployment is working now - (352bd7c) - GUO YANKE
+- using encoded_network and correct nonce handling, making send eth working - (5675c34) - GUO YANKE
+- eth_sendTransaction with null "value" field - (a0fb92e) - GUO YANKE
+#### Documentation
+- update README.md [skip ci] - (2c6e34f) - GUO YANKE
+#### Miscellaneous Chores
+- **(version)** update version in package.json - (c42b119) - GUO YANKE
+
+- - -
+
 ## v0.1.0 - 2024-07-02
 #### Build system
 - include protobuf files in package - (b6a7bd6) - GUO YANKE
