@@ -306,8 +306,6 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
       baseTx.data = bytesToHex(txRequest.data, true);
     }
 
-    console.log(typeof baseTx.nonce, baseTx.nonce);
-
     let resp: { v: number; r: Uint8Array; s: Uint8Array };
 
     if (hasEip1559Fields) {
@@ -350,10 +348,6 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
         s: bytesToHex(resp.s, true),
       },
     }).serialized;
-
-    console.log(txRequest.from.toString("hex"));
-    console.log(rawTransaction);
-    console.debug(account);
 
     return this._wrappedProvider.request({
       method: "eth_sendRawTransaction",

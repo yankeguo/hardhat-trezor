@@ -433,7 +433,6 @@ export class TrezorClient {
       body["dataLength"] = args.data.length;
       dataPos = chunk.length;
     }
-    console.debug(body);
     let resp = await this.callRaw(
       session,
       this.wire.EthereumSignTxEIP1559,

@@ -1,5 +1,3 @@
-import { ethers } from "ethers";
-
 export type EIP712MessageDomain = Partial<{
   name: string;
   chainId: number;
