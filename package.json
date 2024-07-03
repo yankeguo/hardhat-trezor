@@ -1,6 +1,6 @@
 {
   "name": "@yankeguo/hardhat-trezor",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Hardhat plugin for integration with a Trezor hardware wallet",
   "main": "dist/index.js",
   "files": [
