@@ -10,8 +10,9 @@
   ],
   "scripts": {
     "test": "mocha --recursive \"test/**/*.ts\" -c --exit",
+    "clean": "rimraf dist tsconfig.tsbuildinfo",
     "format": "prettier . --write",
-    "build": "npm run format && rimraf dist tsconfig.tsbuildinfo && tsc"
+    "build": "npm run format && npm run clean && tsc"
   },
   "repository": {
     "type": "git",

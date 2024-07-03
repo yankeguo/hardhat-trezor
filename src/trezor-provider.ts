@@ -208,7 +208,7 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
     if (params.length == 0) {
       return;
     }
-    const [address, data] = validateParams(params, rpcAddress, t.any as any);
+    const [address, data] = validateParams(params, rpcAddress, t.unknown);
 
     if (!data) {
       throw new HardhatError(ERRORS.NETWORK.ETHSIGN_MISSING_DATA_PARAM);
@@ -287,13 +287,16 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
 
     const account = this._resolveManagedAccount(txRequest.from);
 
+    //TODO: need full investigation on nonce handling
+
     const baseTx: ethers.TransactionLike = {
       chainId: this.chainId,
       gasLimit: txRequest.gas,
       gasPrice: txRequest.gasPrice,
       maxFeePerGas: txRequest.maxFeePerGas,
       maxPriorityFeePerGas: txRequest.maxPriorityFeePerGas,
-      nonce: Number(txRequest.nonce),
+      // 0 nonce should be treated as undefined and creates an empty Uint8Array, or it will create a bad transaction
+      nonce: txRequest.nonce ? Number(txRequest.nonce) : undefined,
       value: txRequest.value,
     };
     if (txRequest.to !== undefined) {
@@ -303,46 +306,40 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
       baseTx.data = bytesToHex(txRequest.data, true);
     }
 
+    console.log(typeof baseTx.nonce, baseTx.nonce);
+
     let resp: { v: number; r: Uint8Array; s: Uint8Array };
 
     if (hasEip1559Fields) {
-      resp = await this.client.callEthereumSignTxEIP1559(
-        this.session,
-        account.derivationPath,
-        {
-          nonce: baseTx.nonce == null ? undefined : numberToBytes(baseTx.nonce),
-          gasLimit: numberToBytes(baseTx.gasLimit!),
-          maxGasFee: numberToBytes(baseTx.maxFeePerGas!),
-          maxPriorityFee: numberToBytes(baseTx.maxPriorityFeePerGas!),
-          value: baseTx.value == null ? undefined : numberToBytes(baseTx.value),
-          chainId: this.chainId,
-          to: baseTx.to ?? undefined,
-          data:
-            txRequest.data == null ? undefined : bufferToBytes(txRequest.data),
-          accessList: txRequest.accessList?.map((al) => ({
+      resp = await this.client.callEthereumSignTxEIP1559(this.session, {
+        addressN: account.derivationPath,
+        nonce: numberToBytes(baseTx.nonce) ?? new Uint8Array(0),
+        gasLimit: numberToBytes(baseTx.gasLimit!),
+        maxGasFee: numberToBytes(baseTx.maxFeePerGas!),
+        maxPriorityFee: numberToBytes(baseTx.maxPriorityFeePerGas!),
+        value: numberToBytes(baseTx.value) ?? new Uint8Array(0),
+        chainId: this.chainId,
+        to: baseTx.to ?? undefined,
+        data: bufferToBytes(txRequest.data),
+        accessList:
+          txRequest.accessList?.map((al) => ({
             address: bytesToHex(al.address, true).toLowerCase(),
             storageKeys: al.storageKeys?.map((sk) => bufferToBytes(sk)),
-          })),
-          definitions: { encodedNetwork: this.encodedNetwork },
-        },
-      );
+          })) ?? [],
+        definitions: { encodedNetwork: this.encodedNetwork },
+      });
     } else {
-      resp = await this.client.callEthereumSignTx(
-        this.session,
-        account.derivationPath,
-        {
-          nonce:
-            baseTx.nonce == null ? undefined : numberToBytes(baseTx.nonce, 32),
-          gasLimit: numberToBytes(baseTx.gasLimit!),
-          gasPrice: numberToBytes(baseTx.gasPrice!),
-          value: baseTx.value == null ? undefined : numberToBytes(baseTx.value),
-          chainId: this.chainId,
-          to: baseTx.to ?? undefined,
-          data:
-            txRequest.data == null ? undefined : bufferToBytes(txRequest.data),
-          definitions: { encodedNetwork: this.encodedNetwork },
-        },
-      );
+      resp = await this.client.callEthereumSignTx(this.session, {
+        addressN: account.derivationPath,
+        nonce: numberToBytes(baseTx.nonce),
+        gasLimit: numberToBytes(baseTx.gasLimit!),
+        gasPrice: numberToBytes(baseTx.gasPrice!),
+        value: numberToBytes(baseTx.value),
+        chainId: this.chainId,
+        to: baseTx.to ?? undefined,
+        data: bufferToBytes(txRequest.data),
+        definitions: { encodedNetwork: this.encodedNetwork },
+      });
     }
 
     const rawTransaction = ethers.Transaction.from({

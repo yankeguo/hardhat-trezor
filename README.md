@@ -53,6 +53,10 @@ module.exports = {
 };
 ```
 
+## Example
+
+See [demo/hardhat.config.ts](./demo/hardhat.config.ts) for a complete example.
+
 ## Donation
 
 Send me some ETH or tokens to [`yankeguo.eth`](https://app.ens.domains/yankeguo.eth).

@@ -6,12 +6,7 @@ import {
   TrezorWire,
 } from "./trezor-wire";
 import { EIP712Message } from "./types";
-import {
-  base64ToBytes,
-  base64ToHex,
-  bytesToHex,
-  numberToBytes,
-} from "./encoding";
+import { base64ToBytes, base64ToHex, bytesToHex } from "./encoding";
 
 export const defaultTrezorBridgeURL = "http://127.0.0.1:21325";
 
@@ -322,33 +317,43 @@ export class TrezorClient {
 
   public async callEthereumSignTx(
     session: string,
-    derivationPath: number[],
-    tx: {
+    args: {
+      addressN: number[];
       nonce?: Uint8Array;
       gasPrice: Uint8Array;
       gasLimit: Uint8Array;
       to?: string;
       value?: Uint8Array;
       chainId: number;
+      txType?: number;
       data?: Uint8Array;
       definitions?: { encodedNetwork?: Uint8Array; encodedToken?: Uint8Array };
     },
   ) {
     let body: Record<string, any> = {
-      addressN: derivationPath,
-      nonce: tx.nonce,
-      gasPrice: tx.gasPrice,
-      gasLimit: tx.gasLimit,
-      to: tx.to,
-      value: tx.value ?? numberToBytes(0),
-      chainId: tx.chainId,
-      definitions: tx.definitions,
+      addressN: args.addressN,
+      gasPrice: args.gasPrice,
+      gasLimit: args.gasLimit,
+      chainId: args.chainId,
     };
+    if (args.nonce) {
+      body["nonce"] = args.nonce;
+    }
+    if (args.to != null) {
+      body["to"] = args.to;
+    }
+    if (args.value) {
+      body["value"] = args.value;
+    }
+    if (args.definitions) {
+      body["definitions"] = args.definitions;
+    }
     let dataPos = 0;
-    if (tx.data) {
-      const chunk = tx.data.length > 1024 ? tx.data.slice(0, 1024) : tx.data;
+    if (args.data) {
+      const chunk =
+        args.data.length > 1024 ? args.data.slice(0, 1024) : args.data;
       body["dataInitialChunk"] = chunk;
-      body["dataLength"] = tx.data.length;
+      body["dataLength"] = args.data.length;
       dataPos = chunk.length;
     }
     let resp = await this.callRaw(session, this.wire.EthereumSignTx, body);
@@ -363,7 +368,7 @@ export class TrezorClient {
               signatureS?: string;
             };
           if (dataLength !== undefined) {
-            const chunk = tx.data?.slice(dataPos, dataPos + dataLength);
+            const chunk = args.data?.slice(dataPos, dataPos + dataLength);
             dataPos += dataLength;
             await this._write(session, this.wire.EthereumTxAck, {
               dataChunk: chunk,
@@ -390,37 +395,42 @@ export class TrezorClient {
 
   public async callEthereumSignTxEIP1559(
     session: string,
-    derivationPath: number[],
-    tx: {
-      nonce?: Uint8Array;
-      gasLimit: Uint8Array;
+    args: {
+      addressN: number[];
+      nonce: Uint8Array;
       maxGasFee: Uint8Array;
       maxPriorityFee: Uint8Array;
+      gasLimit: Uint8Array;
       to?: string;
-      value?: Uint8Array;
-      chainId: number;
+      value: Uint8Array;
       data?: Uint8Array;
-      accessList?: Array<{ address: string; storageKeys?: Uint8Array[] }>;
+      chainId: number;
+      accessList: Array<{ address: string; storageKeys?: Uint8Array[] }>;
       definitions?: { encodedNetwork?: Uint8Array; encodedToken?: Uint8Array };
     },
   ) {
     let body: Record<string, any> = {
-      addressN: derivationPath,
-      nonce: tx.nonce,
-      gasLimit: tx.gasLimit,
-      maxGasFee: tx.maxGasFee,
-      maxPriorityFee: tx.maxPriorityFee,
-      to: tx.to,
-      value: tx.value ?? numberToBytes(0),
-      chainId: tx.chainId,
-      accessList: tx.accessList,
-      definitions: tx.definitions,
+      addressN: args.addressN,
+      nonce: args.nonce,
+      maxGasFee: args.maxGasFee,
+      maxPriorityFee: args.maxPriorityFee,
+      gasLimit: args.gasLimit,
+      value: args.value,
+      chainId: args.chainId,
+      accessList: args.accessList,
     };
+    if (args.to != null) {
+      body["to"] = args.to;
+    }
+    if (args.definitions) {
+      body["definitions"] = args.definitions;
+    }
     let dataPos = 0;
-    if (tx.data) {
-      const chunk = tx.data.length > 1024 ? tx.data.slice(0, 1024) : tx.data;
+    if (args.data) {
+      const chunk =
+        args.data.length > 1024 ? args.data.slice(0, 1024) : args.data;
       body["dataInitialChunk"] = chunk;
-      body["dataLength"] = tx.data.length;
+      body["dataLength"] = args.data.length;
       dataPos = chunk.length;
     }
     console.debug(body);
@@ -440,7 +450,7 @@ export class TrezorClient {
               signatureS?: string;
             };
           if (dataLength !== undefined) {
-            const chunk = tx.data?.slice(dataPos, dataPos + dataLength);
+            const chunk = args.data?.slice(dataPos, dataPos + dataLength);
             dataPos += dataLength;
             await this._write(session, this.wire.EthereumTxAck, {
               dataChunk: chunk,

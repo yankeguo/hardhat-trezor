@@ -23,13 +23,6 @@ export function numberToByteArray(
   return bytes;
 }
 
-export function numberToBytes(
-  v: number | bigint | boolean | string,
-  size: number = 0,
-): Uint8Array {
-  return new Uint8Array(numberToByteArray(v, size));
-}
-
 export function numberToHex(
   v: number | bigint | boolean | string,
   size: number = 0,
@@ -38,7 +31,38 @@ export function numberToHex(
   return bytesToHex(numberToByteArray(v, size), addPrefix);
 }
 
-export function bufferToBytes(buf: Buffer): Uint8Array {
+export function numberToBytes(
+  v: number | bigint | boolean | string,
+  size?: number,
+): Uint8Array;
+
+export function numberToBytes(
+  v: number | bigint | boolean | string | null | undefined,
+  size?: number,
+): Uint8Array | undefined;
+
+export function numberToBytes(
+  v: number | bigint | boolean | string | null | undefined,
+  size: number = 0,
+): Uint8Array | undefined {
+  if (v == null) {
+    return undefined;
+  }
+  return new Uint8Array(numberToByteArray(v, size));
+}
+
+export function bufferToBytes(buf: Buffer): Uint8Array;
+
+export function bufferToBytes(
+  buf: Buffer | null | undefined,
+): Uint8Array | undefined;
+
+export function bufferToBytes(
+  buf: Buffer | null | undefined,
+): Uint8Array | undefined {
+  if (!buf) {
+    return undefined;
+  }
   return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
 }
 
