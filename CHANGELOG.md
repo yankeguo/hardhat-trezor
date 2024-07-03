@@ -2,6 +2,14 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.1.3 - 2024-07-03
+#### Features
+- allow ibypassing trezor derivation path validation - (dfc7aa7) - GUO YANKE
+#### Miscellaneous Chores
+- **(version)** update version in package.json - (2af309b) - GUO YANKE
+
+- - -
+
 ## v0.1.2 - 2024-07-03
 #### Documentation
 - update README.md [skip ci] - (7355dc7) - GUO YANKE
