@@ -37,6 +37,7 @@ import {
 
 type TrezorProviderOptions = {
   derivationPaths?: number[][];
+  insecureDerivation?: boolean;
   client: TrezorClient;
   wire: TrezorWire;
 };
@@ -47,36 +48,31 @@ interface TrezorAccount {
 }
 
 export class TrezorProvider extends ProviderWrapperWithChainId {
-  _wrappedProvider: EIP1193Provider;
+  _derivationPaths: number[][];
+  _insecureDerivation: boolean;
 
-  derivationPaths: number[][];
   client: TrezorClient;
   wire: TrezorWire;
 
-  chainId: number;
-  encodedNetwork: Uint8Array;
-
   session: string;
+
+  encodedNetwork?: Uint8Array;
 
   accounts: TrezorAccount[];
 
-  constructor(opts: TrezorProviderOptions, wrappedProvider: EIP1193Provider) {
-    super(wrappedProvider);
+  constructor(opts: TrezorProviderOptions, _wrappedProvider: EIP1193Provider) {
+    super(_wrappedProvider);
 
-    this._wrappedProvider = wrappedProvider;
     let derivationPaths = opts.derivationPaths;
     if (!derivationPaths || derivationPaths.length === 0) {
       derivationPaths = [trezorWireDefaultDerivationPath];
     }
-    this.derivationPaths = derivationPaths.map((p) =>
+    this._derivationPaths = derivationPaths.map((p) =>
       trezorWireHardenDerivationPath(p),
     );
+    this._insecureDerivation = !!opts.insecureDerivation;
     this.client = opts.client;
     this.wire = opts.wire;
-
-    // empty network info
-    this.chainId = -1;
-    this.encodedNetwork = new Uint8Array();
 
     // empty session and accounts
     this.session = "";
@@ -84,10 +80,14 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
   }
 
   private async _initializeNetwork() {
-    this.chainId = await this._getChainId();
+    if (this._insecureDerivation) {
+      return;
+    }
+
+    const chainId = await this._getChainId();
 
     const resp = await fetch(
-      `https://data.trezor.io/firmware/eth-definitions/chain-id/${this.chainId}/network.dat`,
+      `https://data.trezor.io/firmware/eth-definitions/chain-id/${chainId}/network.dat`,
     );
     this.encodedNetwork = new Uint8Array(await resp.arrayBuffer());
   }
@@ -128,7 +128,7 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
 
   private async _initializeAccounts() {
     const accounts: TrezorAccount[] = [];
-    for (const derivationPath of this.derivationPaths) {
+    for (const derivationPath of this._derivationPaths) {
       const addresses = await this.client.callEthereumGetAddress(this.session, {
         addressN: derivationPath,
         encodedNetwork: this.encodedNetwork,
@@ -290,7 +290,7 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
     //TODO: need full investigation on nonce handling
 
     const baseTx: ethers.TransactionLike = {
-      chainId: this.chainId,
+      chainId: await this._getChainId(),
       gasLimit: txRequest.gas,
       gasPrice: txRequest.gasPrice,
       maxFeePerGas: txRequest.maxFeePerGas,
@@ -316,7 +316,7 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
         maxGasFee: numberToBytes(baseTx.maxFeePerGas!),
         maxPriorityFee: numberToBytes(baseTx.maxPriorityFeePerGas!),
         value: numberToBytes(baseTx.value) ?? new Uint8Array(0),
-        chainId: this.chainId,
+        chainId: baseTx.chainId as number,
         to: baseTx.to ?? undefined,
         data: bufferToBytes(txRequest.data),
         accessList:
@@ -333,7 +333,7 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
         gasLimit: numberToBytes(baseTx.gasLimit!),
         gasPrice: numberToBytes(baseTx.gasPrice!),
         value: numberToBytes(baseTx.value),
-        chainId: this.chainId,
+        chainId: baseTx.chainId as number,
         to: baseTx.to ?? undefined,
         data: bufferToBytes(txRequest.data),
         definitions: { encodedNetwork: this.encodedNetwork },
@@ -384,13 +384,14 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
 
 export async function createTrezorProvider(
   provider: EIP1193Provider,
-  { trezorDerivationPaths }: NetworkConfig,
+  { trezorDerivationPaths, trezorInsecureDerivation }: NetworkConfig,
 ) {
   const trezorWire = await createTrezorWire();
   const trezorClient = new TrezorClient({ wire: trezorWire });
   const trezorProvider = new TrezorProvider(
     {
       derivationPaths: trezorDerivationPaths,
+      insecureDerivation: trezorInsecureDerivation,
       client: trezorClient,
       wire: trezorWire,
     },

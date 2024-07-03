@@ -105,11 +105,12 @@ module.exports = {
   solidity: "0.8.24",
   networks: {
     sepolia: {
-      url: "https://rpc.sepolia-api.lisk.com",
+      url: "https://sepolia.infura.io/v3/" + process.env.INFURA_API_KEY,
       trezorDerivationPaths: [
-        [44, 1, 0, 0, 0],
-        [44, 1, 0, 0, 1],
+        [44, 60, 0, 0, 0],
+        [44, 60, 0, 0, 1],
       ],
+      trezorInsecureDerivation: true,
     },
   },
 } as HardhatUserConfig;

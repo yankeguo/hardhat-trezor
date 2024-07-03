@@ -214,7 +214,7 @@ export class TrezorClient {
 
   public async callEthereumGetAddress(
     session: string,
-    args: { addressN: number[]; encodedNetwork: Uint8Array },
+    args: { addressN: number[]; encodedNetwork?: Uint8Array },
   ) {
     const accounts = [];
 
@@ -243,7 +243,7 @@ export class TrezorClient {
     args: {
       addressN: number[];
       message: Uint8Array;
-      encodedNetwork: Uint8Array;
+      encodedNetwork?: Uint8Array;
     },
   ) {
     const { signature: signatureBase64 } = (await this.call(
@@ -260,7 +260,7 @@ export class TrezorClient {
     message: EIP712Message,
     args: {
       addressN: number[];
-      definitions: { encodedNetwork: Uint8Array; encodedToken?: Uint8Array };
+      definitions: { encodedNetwork?: Uint8Array; encodedToken?: Uint8Array };
     },
   ) {
     const converter = new TrezorWireEIP712(message);

@@ -6,17 +6,21 @@ import "hardhat/types/config";
 declare module "hardhat/types/config" {
   interface HardhatNetworkUserConfig {
     trezorDerivationPaths?: number[][];
+    trezorInsecureDerivation: boolean;
   }
 
   interface HardhatNetworkConfig {
     trezorDerivationPaths?: number[][];
+    trezorInsecureDerivation: boolean;
   }
 
   interface HttpNetworkUserConfig {
     trezorDerivationPaths?: number[][];
+    trezorInsecureDerivation?: boolean;
   }
   interface HttpNetworkConfig {
     trezorDerivationPaths?: number[][];
+    trezorInsecureDerivation?: boolean;
   }
 }
 
@@ -24,6 +28,8 @@ extendConfig((config, userConfig) => {
   for (const networkName of Object.keys(config.networks)) {
     config.networks[networkName].trezorDerivationPaths =
       userConfig.networks?.[networkName]?.trezorDerivationPaths;
+    config.networks[networkName].trezorInsecureDerivation =
+      userConfig.networks?.[networkName]?.trezorInsecureDerivation;
   }
 });
 
