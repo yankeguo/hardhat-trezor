@@ -361,7 +361,17 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
       try {
         accounts = (await this._wrappedProvider.request(args)) as string[];
       } catch (e) {
-        console.log("warning: failed to get accounts from wrapped provider", e);
+        if (e instanceof Error) {
+          console.log(
+            "Warning: failed to get accounts from wrapped provider:",
+            e.message,
+          );
+        } else {
+          console.log(
+            "Warning: failed to get accounts from wrapped provider:",
+            e,
+          );
+        }
       }
       return [...accounts, ...this.accounts.map((a) => a.address)];
     }
