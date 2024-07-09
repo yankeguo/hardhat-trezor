@@ -2,6 +2,15 @@
 All notable changes to this project will be documented in this file. See [conventional commits](https://www.conventionalcommits.org/) for commit guidelines.
 
 - - -
+## v0.1.4 - 2024-07-09
+#### Bug Fixes
+- ignore wrapped provider error on "eth_accounts" request - (5f734ba) - GUO YANKE
+#### Miscellaneous Chores
+- **(version)** update version in package.json - (5868dd3) - GUO YANKE
+- update logging when wrapped provider failed to fetch accounts - (f498baa) - GUO YANKE
+
+- - -
+
 ## v0.1.3 - 2024-07-03
 #### Features
 - allow ibypassing trezor derivation path validation - (dfc7aa7) - GUO YANKE
