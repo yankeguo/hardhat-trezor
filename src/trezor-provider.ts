@@ -357,7 +357,12 @@ export class TrezorProvider extends ProviderWrapperWithChainId {
 
   public async request(args: RequestArguments): Promise<unknown> {
     if (args.method === "eth_accounts") {
-      const accounts = (await this._wrappedProvider.request(args)) as string[];
+      let accounts: string[] = [];
+      try {
+        accounts = (await this._wrappedProvider.request(args)) as string[];
+      } catch (e) {
+        console.log("warning: failed to get accounts from wrapped provider", e);
+      }
       return [...accounts, ...this.accounts.map((a) => a.address)];
     }
 
